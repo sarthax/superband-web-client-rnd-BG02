@@ -160,15 +160,15 @@
                 </div>
               </div>
               <div class="row">
-                <label class="field">
+                <label class="field" id="dialWidthOption">
                   Width
                   <input id="dialW" type="number" value="360" min="16" max="1024" />
                 </label>
-                <label class="field">
+                <label class="field" id="dialHeightOption">
                   Height
                   <input id="dialH" type="number" value="360" min="16" max="1024" />
                 </label>
-                <label class="field">
+                <label class="field" id="roleOptions">
                   Role
                   <select id="functionType">
                     <option value="1" selected>Background</option>
@@ -177,14 +177,15 @@
                   </select>
                 </label>
               </div>
-              <label class="check"
+              <label class="check" id="roundMaskOption"
                 ><input type="checkbox" id="roundMask" checked /> Round screen mask</label
               >
-              <label class="check"
+              <label class="check" id="allocMediaOption"
                 ><input type="checkbox" id="allocMedia" checked /> Allocate media ID</label
               >
               <p class="lead" id="imageMeta">No image selected.</p>
               <p class="hint" id="imageInputHint">Connect a badge to see supported image formats.</p>
+              <p class="hint">Based on the <a href="https://github.com/T-REX-XP/superband-web-client-rnd" target="_blank" rel="noopener noreferrer">original SuperBand web client</a>.</p>
               <div class="progress" id="pushProgress" hidden><i id="pushBar"></i></div>
             </div>
           </section>
