@@ -187,7 +187,7 @@ function applyBadgeProfile(snapshot = client.getSnapshot()) {
   $('#btnOtaFlash').disabled = profile.bg02 || !client.connected;
   $('#btnOtaFlashPicker').disabled = profile.bg02;
   $('#otaConfirmRisk').disabled = profile.bg02;
-  $('#otaConfirmRisk').checked = false;
+  if (changed && profile.bg02) $('#otaConfirmRisk').checked = false;
   if (changed) {
     const file = $('#imageInput').files?.[0];
     if (file) {
