@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="SuperBand electronic badge Web Bluetooth manager" />
+    <meta name="description" content="Bluetooth badge manager with device-specific image formats" />
     <meta name="color-scheme" content="dark" />
-    <title>SuperBand</title>
+    <title>BG02 Badge Manager</title>
     <link rel="stylesheet" href="css/app.css" />
   </head>
   <body>
@@ -13,24 +13,24 @@
       <header class="hero">
         <div class="hero-top">
           <div class="brand-block">
-            <h1>SUPERBAND</h1>
+            <h1>BADGE MANAGER</h1>
             <p class="app-version" id="appVersion" aria-label="App version">2026.08.11.1</p>
           </div>
           <nav class="hero-links" aria-label="Project links">
             <a
-              href="https://github.com/T-REX-XP/superband-web-client-rnd"
+              href="https://github.com/sarthax/superband-web-client-rnd-BG02"
               target="_blank"
               rel="noopener noreferrer"
               >GitHub</a
             >
             <a
-              href="https://github.com/T-REX-XP/superband-web-client-rnd/blob/main/docs/README.md"
+              href="https://github.com/sarthax/superband-web-client-rnd-BG02/blob/main/docs/README.md"
               target="_blank"
               rel="noopener noreferrer"
               >Docs</a
             >
             <a
-              href="https://github.com/T-REX-XP/superband-web-client-rnd/issues"
+              href="https://github.com/sarthax/superband-web-client-rnd-BG02/issues"
               target="_blank"
               rel="noopener noreferrer"
               >Issues</a
@@ -38,8 +38,8 @@
           </nav>
         </div>
         <p>
-          Manage your electronic badge over Bluetooth — push faces, inspect storage, and run
-          advanced OTA / protocol tools.
+          Manage pictures on Bluetooth badges. Image settings adapt to the connected device; diagnostics
+          and firmware research stay under Advanced.
         </p>
         <div class="hero-cta">
           <span class="status-pill" id="connPill" data-state="">Disconnected</span>
@@ -93,8 +93,7 @@
           <section class="section">
             <h2>Device</h2>
             <p class="lead">
-              At-a-glance identity from GATT Device Information + battery; storage from Baji when
-              the badge answers.
+              Connected badge information, hardware version, firmware and battery.
             </p>
             <div class="stack">
               <div class="stats" id="deviceStats">
@@ -138,9 +137,9 @@
           </section>
 
           <section class="section">
-            <h2>Push image</h2>
+            <h2>Upload image</h2>
             <p class="lead">
-              Crop to dial size (default 360×360), encode JPEG, upload via Baji or FitPro dial31.
+              <span id="imageFormatHelp">Connect a badge to choose the right image format and size.</span>
             </p>
             <div class="stack">
               <ul class="checklist" id="pushChecklist">
@@ -155,8 +154,8 @@
                 </div>
                 <div class="row">
                   <input class="file-input" id="imageInput" type="file" accept="image/*,.ru50" />
-                  <button type="button" id="btnPickImage">Choose image / .ru50</button>
-                  <button class="primary" data-need-conn disabled id="btnPush">Push to active</button>
+                  <button type="button" id="btnPickImage">Choose image</button>
+                  <button class="primary" data-need-conn disabled id="btnPush">Upload to badge</button>
                   <button data-need-conn disabled id="btnPushAll" hidden>Push to all</button>
                 </div>
               </div>
@@ -185,12 +184,12 @@
                 ><input type="checkbox" id="allocMedia" checked /> Allocate media ID</label
               >
               <p class="lead" id="imageMeta">No image selected.</p>
-              <p class="lead">Experimental BG02: convert a PNG to a .ru50 file using tools/encode_bg02_ru50.py and select that file. Other badges retain their RGB565/JPEG paths. This is not a firmware update.</p>
+              <p class="hint" id="imageInputHint">Connect a badge to see supported image formats.</p>
               <div class="progress" id="pushProgress" hidden><i id="pushBar"></i></div>
             </div>
           </section>
 
-          <section class="section" style="grid-column: 1 / -1">
+          <section class="section" id="mediaLibrarySection" style="grid-column: 1 / -1" hidden>
             <h2>Media library</h2>
             <p class="lead">List and delete media IDs (Baji badges only).</p>
             <div class="stack">
@@ -340,7 +339,7 @@
       </section>
 
       <footer class="site-footer">
-        <span id="buildMeta">SuperBand v2026.08.11.1</span>
+        <span id="buildMeta">Badge Manager</span>
         <span class="footer-links">
           <a
             href="https://github.com/T-REX-XP/superband-web-client-rnd"
@@ -350,7 +349,7 @@
           >
           ·
           <a
-            href="https://github.com/T-REX-XP/superband-web-client-rnd/blob/main/docs/BLE_PROTOCOL.md"
+            href="https://github.com/sarthax/superband-web-client-rnd-BG02/blob/main/docs/README.md"
             target="_blank"
             rel="noopener noreferrer"
             >Protocol</a
