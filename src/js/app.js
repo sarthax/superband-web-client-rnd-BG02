@@ -1,5 +1,6 @@
 import { SuperBandClient, FileType, FunctionType } from './client.js';
 import { prepareFileForBadge, formatBytes, DEFAULT_DIAL } from './image.js';
+import { inspectRu50, looksLikeBg02 } from './ru50.js';
 import { REPO_URL } from './protocol.js';
 import { bindAdvanced } from './advanced.js';
 
@@ -277,24 +278,44 @@ async function rebuildPreview() {
     return;
   }
   try {
-    // BJ/DG FitPro: RGB565 dial type 0. Baji / algorithm-4 JPEG only when needed.
-    const snap = client.getSnapshot();
-    const useJpeg = snap.protocolMode === 'baji' || snap.dialAlgorithm === 4;
-    prepared = await prepareFileForBadge(file, {
-      width: Number($('#dialW').value) || DEFAULT_DIAL.width,
-      height: Number($('#dialH').value) || DEFAULT_DIAL.height,
-      quality: 0.5,
-      round: $('#roundMask').checked,
-      format: useJpeg ? 'jpeg444' : 'rgb565',
-    });
-    const img = $('#dialPreview');
-    img.src = prepared.previewUrl;
-    img.hidden = false;
-    $('#dialPlaceholder').hidden = true;
-    $('#dial').classList.toggle('round', $('#roundMask').checked);
-    const fmtLabel = prepared.format === 'jpeg444' ? 'JPEG 4:4:4' : 'RGB565';
-    $('#imageMeta').textContent =
-      `${file.name} → ${prepared.width}×${prepared.height} ${fmtLabel} · ${formatBytes(prepared.bytes.length)}`;
+    const isRu50 = file.name.toLowerCase().endsWith('.ru50');
+    if (isRu50) {
+      // Reuse the independently reverse-engineered JieLi encoder offline.
+      // Do NOT let the canvas RGB565 encoder silently mangle this binary.
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const meta = inspectRu50(bytes);
+      prepared = {
+        blob: file, bytes, width: meta.width, height: meta.height,
+        format: 'ru50', previewUrl: null,
+      };
+      $('#dialW').value = String(meta.width);
+      $('#dialH').value = String(meta.height);
+      $('#dialPreview').hidden = true;
+      $('#dialPlaceholder').hidden = false;
+      $('#dialPlaceholder').textContent = 'RU50 / ETC2 ready (no browser preview)';
+      $('#imageMeta').textContent =
+        `${file.name} → ${meta.width}×${meta.height} BG02 RU50/ETC2 · ${formatBytes(bytes.length)} · EXPERIMENTAL`;
+      log({ msg: `BG02 RU50 validated: ${bytes.length} bytes, payload=${meta.payloadLength}, flags=0x${meta.flags.toString(16)}` });
+    } else {
+      // Other badges keep their existing RGB565/JPEG behavior unchanged.
+      const snap = client.getSnapshot();
+      const useJpeg = snap.protocolMode === 'baji' || snap.dialAlgorithm === 4;
+      prepared = await prepareFileForBadge(file, {
+        width: Number($('#dialW').value) || DEFAULT_DIAL.width,
+        height: Number($('#dialH').value) || DEFAULT_DIAL.height,
+        quality: 0.5,
+        round: $('#roundMask').checked,
+        format: useJpeg ? 'jpeg444' : 'rgb565',
+      });
+      const img = $('#dialPreview');
+      img.src = prepared.previewUrl;
+      img.hidden = false;
+      $('#dialPlaceholder').hidden = true;
+      $('#dial').classList.toggle('round', $('#roundMask').checked);
+      const fmtLabel = prepared.format === 'jpeg444' ? 'JPEG 4:4:4' : 'RGB565';
+      $('#imageMeta').textContent =
+        `${file.name} → ${prepared.width}×${prepared.height} ${fmtLabel} · ${formatBytes(prepared.bytes.length)}`;
+    }
     updatePushChecklist();
   } catch (e) {
     prepared = null;
@@ -312,6 +333,14 @@ async function pushImage() {
   if (!prepared) {
     toast('Choose an image first', 'err');
     return;
+  }
+  if (prepared.format === 'ru50') {
+    const snap = client.getSnapshot();
+    if (snap.protocolMode !== 'fitpro' || !looksLikeBg02(snap)) {
+      toast('RU50 experiment requires a confirmed BG02/LJ733 FitPro badge', 'err');
+      return;
+    }
+    log({ msg: 'EXPERIMENTAL BG02 RU50 transfer; ACK success does not guarantee image renders', level: 'warn' });
   }
   const bar = $('#pushBar');
   const wrap = $('#pushProgress');
@@ -365,6 +394,10 @@ async function pushAll() {
   }
   if (!prepared) {
     toast('Choose an image first', 'err');
+    return;
+  }
+  if (prepared.format === 'ru50') {
+    toast('Experimental RU50 is limited to one verified BG02 at a time', 'err');
     return;
   }
   const bar = $('#pushBar');
