@@ -1,4 +1,5 @@
 import { SuperBandBle } from './ble.js';
+import { inspectRu50, looksLikeBg02 } from './ru50.js';
 import {
   Module,
   FileCmd,
@@ -563,9 +564,19 @@ class BadgeSession {
 
     try {
       // Do not send DIAL_INFO (0x20/2) — drops BJ-1. Default RGB565 + dialType 0.
+      const isRu50 = fileBytes.length >= 4 &&
+        fileBytes[0] === 0x52 && fileBytes[1] === 0x55 &&
+        fileBytes[2] === 0x35 && fileBytes[3] === 0x30;
+      if (isRu50) {
+        if (!looksLikeBg02(this.getSnapshot())) {
+          throw new Error('RU50 experimental transfer requires BG02/LJ733 identity');
+        }
+        inspectRu50(fileBytes); // Reject corrupt/incorrect dimensions before Bluetooth write.
+      }
       const info = this.dialInfo;
       const dialType = info?.dialType ?? (info?.algorithm === 4 ? 2 : 0);
       const expectJpeg = dialType === 2;
+      if (isRu50 && expectJpeg) throw new Error('RU50 requires dial type 0, not JPEG type 2');
       const looksJpeg =
         fileBytes.length >= 3 && fileBytes[0] === 0xff && fileBytes[1] === 0xd8;
       if (expectJpeg && !looksJpeg) {
@@ -585,7 +596,7 @@ class BadgeSession {
       this._log(
         `Dial31 size=${fileBlob.length} img=${fileBytes.length} ` +
           `chunk=${chunkSize} (atomic GATT, attMax=${attMax}) chunks=${totalChunks} ` +
-          `type=${dialType} ${expectJpeg ? 'JPEG' : 'RGB565'} pace=${FitPro.COMMAND_POOL_MS}ms`,
+          `type=${dialType} ${isRu50 ? 'BG02 RU50/ETC2 (experimental)' : expectJpeg ? 'JPEG' : 'RGB565'} pace=${FitPro.COMMAND_POOL_MS}ms`,
         'info',
       );
       this._emit('transfer', {
