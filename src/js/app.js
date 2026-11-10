@@ -22,9 +22,14 @@ function setPill(el, text, state = '') {
 function syncConnectionChrome() {
   const n = client.sessionCount;
   const on = n > 0 && client.connected;
-  $$('[data-need-conn]').forEach((b) => {
+  $('[data-need-conn]').forEach((b) => {
     b.disabled = !on;
   });
+  // The upstream OTA firmware presets target BJ-1/DG01, not BG02 V1.5.
+  // Keep the BG02 flash actions disabled even after session refreshes.
+  if (resolveBadgeProfile(client.getSnapshot()).bg02) {
+    $('#btnOtaFlash').disabled = true;
+  }
 
   // Always allow adding another device while Web Bluetooth works
   $('#btnConnect').hidden = false;
@@ -171,6 +176,11 @@ function applyBadgeProfile(snapshot = client.getSnapshot()) {
   $('#roundMaskOption').hidden = profile.bg02;
   $('#btnPushAll').hidden = profile.bg02 || client.sessionCount < 2;
   $('#btnPush').textContent = profile.bg02 ? 'Upload RU50' : 'Upload to badge';
+  $('#otaPreset').disabled = profile.bg02;
+  $('#btnOtaPrepare').disabled = profile.bg02;
+  $('#otaCatVersion').disabled = profile.bg02;
+  $('#otaCatName').disabled = profile.bg02;
+  $('#btnOtaProbeCatalog').disabled = profile.bg02;
 
   // The presets in Advanced are for BJ-1/DG01, not our LJ733 V1.5.
   // Do not accidentally offer unrelated firmware flashing as a BG02 action.
