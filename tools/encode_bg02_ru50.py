@@ -10,6 +10,7 @@ import argparse
 from pathlib import Path
 import struct
 import sys
+import tempfile
 
 
 def main() -> None:
@@ -17,6 +18,7 @@ def main() -> None:
     parser.add_argument("--ebadge-root", type=Path, required=True, help="Local arqueomendez/ebadge checkout")
     parser.add_argument("--input", type=Path, required=True, help="PNG/JPEG source")
     parser.add_argument("--output", type=Path, help="Destination .ru50 file")
+    parser.add_argument("--no-swap-rb", action="store_true", help="Disable the red/blue swap (BG02 hardware shows R and B swapped without it)")
     args = parser.parse_args()
 
     root = args.ebadge_root.resolve()
@@ -28,7 +30,16 @@ def main() -> None:
     from ebadge.ru50 import image_to_ru50  # noqa: E402
 
     output = args.output or args.input.with_suffix(".ru50")
-    data = image_to_ru50(str(args.input), 240, 240, fit="cover")
+    source = args.input
+    with tempfile.TemporaryDirectory() as tmp:
+        if not args.no_swap_rb:
+            # Hardware-verified: BG02 displays this encoder's output with R and B swapped.
+            from PIL import Image
+            with Image.open(args.input) as im:
+                r, g, b = im.convert("RGB").split()
+                source = Path(tmp) / "swapped.png"
+                Image.merge("RGB", (b, g, r)).save(source)
+        data = image_to_ru50(str(source), 240, 240, fit="cover")
     if data[:4] != b"RU50" or len(data) != 29904:
         raise SystemExit(f"Unexpected RU50 output length/header: {len(data)} bytes")
     if struct.unpack_from("<I", data, 0x48)[0] != 28800:
