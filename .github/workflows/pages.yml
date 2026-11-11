@@ -57,6 +57,7 @@ jobs:
           export APP_VERSION="$(date -u +%Y.%m.%d).${BUILD_NUMBER}"
           echo "Building SuperBand ${APP_VERSION}"
           bun install --frozen-lockfile
+          node --test tests/ru50.test.mjs tests/device-profile.test.mjs tests/browser-etc2.test.mjs
           bun run build
 
       - name: Assemble Pages site
