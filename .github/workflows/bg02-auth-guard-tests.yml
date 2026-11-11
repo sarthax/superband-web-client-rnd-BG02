@@ -24,6 +24,12 @@ jobs:
         run: python3 -m unittest discover -s tools/tests -p 'test_bg02_ae00_auth_probe.py' -v
       - name: Verify corrected RCSP parser and disabled unauthenticated probes
         run: python3 -m unittest discover -s tools/tests -p 'test_bg02_rcsp_observe.py' -v
+      - uses: astral-sh/setup-uv@v6
+      - name: Resolve pinned MIT JieLi qix-ble auth dependency offline from badge
+        run: |
+          uv run --native-tls --no-project \
+            --with "qix-ble @ git+https://github.com/ElectronicCats/jieli-ble-badge-research.git@1802a8860d87f02c4c8562721f49ee85f1031dce#subdirectory=tools/qix-ble" \
+            python -c "from qix_ble.auth import AuthSession; from qix_ble.rcsp_session import RcspSession; from qix_ble.sysinfo import get_target_info; print('PINNED_QIX_IMPORT_OK')"
       - name: Assert no live BLE invocation is part of CI
         run: |
           echo 'OFFLINE_ONLY: no Bleak installed, no badge connected, no secret material'
