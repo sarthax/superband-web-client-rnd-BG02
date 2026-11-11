@@ -62,7 +62,7 @@ export function looksLikeBg02(snapshot) {
   const identity = [
     snapshot?.name, snapshot?.model, snapshot?.manufacturer, snapshot?.hardware,
   ].filter(Boolean).join(' ');
-  return /\bBG02\b/i.test(identity) || /LJ733[_-]/i.test(identity);
+  return /\bBG02\b/i.test(identity) || /LJ733_MB_V1\.(?:1|5)\b/i.test(identity);
 }
 
 /**
