@@ -60,7 +60,7 @@ function syncConnectionChrome() {
   $('#btnAddBadge').hidden = n === 0;
   $('#btnDisconnect').hidden = n === 0;
   $('#btnDisconnectAll').hidden = n < 2;
-  $('#btnPushAll').hidden = n < 2;
+  $('#btnPushAll').hidden = n < 2 || resolveBadgeProfile(client.getSnapshot()).bg02;
 
   const label =
     n === 0
@@ -290,6 +290,11 @@ function updatePushChecklist() {
     client.sessionCount >= 2 && canPush && !profile.bg02 &&
     prepared?.format !== 'ru50'
   );
+  $('#btnPickImage').disabled = !idle;
+  $('#imageInput').disabled = !idle;
+  $('#cropZoom').disabled = !idle;
+  $('#cropReset').disabled = !idle;
+  $('#cropCanvas').style.pointerEvents = idle ? 'auto' : 'none';
 }
 
 function renderMediaList(items) {
@@ -507,7 +512,9 @@ async function pushImage() {
     toast(
       result.verified === false
         ? 'Uploaded (verify unclear)'
-        : `Pushed to ${client.name || 'badge'} (${via})`,
+        : resolveBadgeProfile(activeSnapshot).bg02
+          ? 'Transfer complete — check the BG02 display'
+          : `Pushed to ${client.name || 'badge'} (${via})`,
       'ok',
     );
     log({
