@@ -113,6 +113,54 @@ https://github.com/Jieli-Tech/Android-JL_Bluetooth/blob/main/code/PiHome_V1.13.0
 2. **Source-only peer fallback:** obtain the 200patch02+ peer-sharing module, find BLE advertising and receiver contract. Only if the standard file-read path is absent, build a safe, isolated receiver.
 3. **Hardware gate only after code proof:** connect, enumerate volumes (no deletions or OTA), and try retrieving one known harmless user image. Distinguish GATT reads from a true file-transfer protocol.
 
+## Narrow active capability probe prepared (2026-11-10)
+
+### First correction: RCSP flags/opcode offset
+
+The first passive inspector incorrectly read **byte offset 3** as the opcode. The documented FE frame uses:
+
+\`FE DC BA | flags@3 | opcode@4 | lengthBE16@5–6 | body | EF\`.
+
+That bug did **not** cause the owner's two zero-notify results, because no notifications arrived. It would have misclassified nonempty ones. The repaired code uses a bounded frame parser, validates body length/end marker, and reassembles fragmented notifications. Seven offline tests pass locally, including known sample traffic, fragment boundaries, and JSONL inspection.
+
+References for header layout and an actual target-info request captured from a *related* device:
+- https://github.com/jumpingmushroom/e87_badge/blob/main/docs/protocol.md (JieLi application-layer FE framing on AE01/AE02)
+- https://github.com/ncr/omarchy-headphones/blob/main/PROTOCOL.md (a documented **read-only opcode 0x02** identity request, **not a BG02-specific capture**)
+- https://doc.zh-jieli.com/SDKWiki/master/Jieli-Tech/HarmonyOS-JL_OTA/core-capabilities/ble-upgrade.html (official AE00/AE01/AE02 RCSP roles)
+- https://github.com/Jieli-Tech/Android-JL_Bluetooth/blob/main/doc/JieLi_Home_SDK_V4.2.0_html_en/html/_sources/development/function/basic_func.rst.txt (official \`CMD_GET_TARGET_INFO\` / \`GetTargetInfoCmd\` family)
+
+### Implemented active diagnostic — one well-defined read-only command
+
+The existing \`tools/bg02_rcsp_observe.py\` retains **passive mode by default** but has an explicit \`--probe-target-info\` option. It:
+
+1. Finds an advertising device named BG02 and refuses an active query when the resolved device name is different.
+2. Connects via Bleak and confirms the AE00 service/AE01 writable characteristic and subscribes to AE02.
+3. Sends **exactly once**, to AE01, the known JieLi family target-info request \`FE DC BA C0 02 00 05 01 FF FF FF FF EF\`. This requests **identity/feature metadata**; it does **not** browse or modify any file.
+4. Waits a bounded window, logs raw AE02 notifications to JSONL, and attempts strict FE-frame reconstruction.
+5. Never retries, authenticates, requests OTA mode, writes a file, or issues speculative browse/read opcodes.
+
+**On Windows, after checking out the updated PR #4 research branch, with the SuperBand phone app and browser manager disconnected:**
+
+\`\`\`powershell
+uv run --native-tls --with bleak python tools/bg02_rcsp_observe.py --device BG02 --probe-target-info --seconds 8 --output "D:\Claude\scratch\bg02_target_info.jsonl"
+py -3 tools/bg02_rcsp_observe.py --inspect "D:\Claude\scratch\bg02_target_info.jsonl"
+\`\`\`
+
+This is a **genuine application-level read-only query**, unlike the earlier empty notification observation. It has **not been executed against the real BG02**. Although the operation is read-only on supported JieLi devices, firmware differences can cause silence or an error; do not treat a response as proof that files are downloadable, or a lack of response as proof they are not. The reference byte sequence and protocol are from related devices; we have not verified V35922's precise RCSP authorization requirements. No commands should be sent to OTA or filesystem endpoints beyond this explicitly reviewed identity request.
+
+Possible outcomes:
+
+| Outcome | What it supports | What it does not support |
+|---|---|---|
+| Valid AE02 RCSP response to opcode \`0x02\` | AE00 accepts at least one non-OTA RCSP identity query | File enumeration / wallpaper readback |
+| Raw authentication challenge, status error or other frame | AE00 protocol path exists and has more requirements | A safe file browser yet |
+| Silence / disconnect | Identity query not accepted under this state/session | Proof of disabled RCSP readback |
+| Unexpected name/service | Wrong or incompatible device, abort | Any capability inference |
+
+### Current firmware evidence/limits
+
+The repo contains the older \`lj733_V27550.zip\` and \`lj733b_V34574.zip\` packages and previous source-string work on **BJ-1 V32286/DG01 V32399**. The existing \`docs/firmware-rewrite/re-fitpro-dispatch.md\` has offsets for FitPro \`0x1F/0x20\`, AVI file paths, and status constants, but it does **not** identify a verified wallpaper **read** handler or AE00 non-OTA command dispatcher. A matching **BG02 V35922 app.bin was not available** for an exact binary comparison, and this session could not obtain the archived firmware ZIP bytes for a new scan. Older related firmware is useful for candidate symbols only; **do not treat string hits as proof of V35922 capability**.
+
 ## BG02 V35922 hardware result — passive AE02 observer (2026-11-10)
 
 The owner ran `tools/bg02_rcsp_observe.py --device BG02 --seconds 20` twice under Windows/Bleak (using `uv run --native-tls --with bleak`), navigating both **Send** and **Receive** modes.
