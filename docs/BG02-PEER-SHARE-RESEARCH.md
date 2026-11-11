@@ -129,7 +129,7 @@ To inspect extracted firmware instead, pass `research/firmware/analysis` if prev
 
 ### Comparable public AC707N implementation — not the same BG02
 
-The [ElectronicCats AC707N E87/DG01 implementation](https://github.com/ElectronicCats/jieli-ble-badge-research) targets **360×360** E87/DG01, not our BG02 **240×240, firmware V35922**. It contains a six-step cryptographic AE01/AE02 handshake; an auth-gated RCSP target-info `0x03`; auth-gated browse `0x0C` of USB/SD0/SD1/FLASH; and small-file read `0x28`. Its source also notes DG01 browse attempts that returned zero entries because no browsable storage was mounted. Thus even successful RCSP auth would not imply wallpaper file access.
+The [ElectronicCats AC707N E87/DG01 implementation](https://github.com/ElectronicCats/jieli-ble-badge-research) targets **360×360** E87/DG01, not our BG02 **240×240, firmware V35922**. It contains a six-step cryptographic AE01/AE02 handshake; an auth-gated RCSP target-info `0x03`; auth-gated browse `0x0C` of USB/SD0/SD1/FLASH; and small-file read `0x28`. Its source also notes DG01 browse attempts that returned zero entries because no browsable storage was mounted. Thus even successful RCSP auth would not imply wallpaper file access. **The E87/DG01 Qix control path additionally uses an FD00 GATT service; the owner's BG02 service discovery did not include FD00.** This rules out treating the entire Qix bootstrap/control workflow as a drop-in BG02 implementation, even though both expose AE00.
 
 - [Authentication source](https://github.com/ElectronicCats/jieli-ble-badge-research/blob/main/tools/qix-ble/qix_ble/auth.py)
 - [RCSP filesystem source](https://github.com/ElectronicCats/jieli-ble-badge-research/blob/main/tools/qix-ble/qix_ble/rcsp_session.py)
