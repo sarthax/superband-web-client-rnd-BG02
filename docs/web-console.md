@@ -1,5 +1,8 @@
 # Web clients
 
+> **BG02 picture manager:** The everyday tab is now **Pictures** (Connect → Choose photo → Crop/zoom → Upload), and the device details are collapsed. The activity log and all OTA/probe tools remain in **Advanced**. BG02 uses 240×240 RU50/ETC2 from ordinary browser photos or a pre-encoded .ru50; generic RGB565 must **not** be used on BG02. See [picture workflow](BG02-BROWSER-CROP.md) and [release checklist](BG02-PICTURE-RELEASE-CHECKLIST.md). The remainder of this document preserves original multi-badge and research feature notes; older 360×360 labels describe generic badges, not BG02.
+
+
 All application UI sources live under [`../src/`](../src/).
 
 | App | Path | Audience |
