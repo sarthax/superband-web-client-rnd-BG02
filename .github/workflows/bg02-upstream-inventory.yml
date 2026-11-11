@@ -1,0 +1,56 @@
+name: BG02 upstream source inventory (one-time research)
+
+on:
+  push:
+    branches: [research/bg02-peer-share-readback]
+    paths: ['.github/workflows/bg02-upstream-inventory.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upstream-inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Query public JieLi SDK source-file inventory (no downloads)
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error
+          from urllib.parse import urlencode
+          HOST='https://gitlab.zh-jieli.com/api/v4/projects/1463/repository/tree'
+          WATCH=('wallpaper','sharing','share_','rcsp','file_browse','ble_client','wallpaper_adv','picture','transfer')
+          # Metadata only; capped at 4 pages per root to conserve vendor resources.
+          for root in ('src','SDK'):
+              total=0
+              hits=[]
+              status='ok'
+              for page in range(1,5):
+                  qs=urlencode({'path':root,'ref':'main','recursive':'true','per_page':100,'page':page})
+                  req=urllib.request.Request(HOST+'?'+qs,headers={'User-Agent':'BG02-offline-source-research/1.0','Accept':'application/json'})
+                  try:
+                      with urllib.request.urlopen(req, timeout=12) as response:
+                          items=json.loads(response.read(1500000))
+                  except (urllib.error.HTTPError,urllib.error.URLError,TimeoutError,ValueError) as exc:
+                      status=type(exc).__name__+': '+str(exc)[:100]
+                      break
+                  if not isinstance(items,list):
+                      status='non-list-response'
+                      break
+                  total+=len(items)
+                  for item in items:
+                      path=item.get('path','')
+                      if any(word in path.lower() for word in WATCH):
+                          hits.append(path)
+                  if len(items)<100:
+                      break
+              print('ROOT',root,'STATUS',status,'PATHS_INSPECTED',total,'CANDIDATES',len(hits))
+              for path in hits[:65]:
+                  print('  SOURCE_PATH',path)
+              if total==400:
+                  print('  LIMIT_REACHED: further pages not checked')
+          print('No source files downloaded; metadata is from vendor SDK main branch only.')
+          print('A missing match does not rule out a patched 200patch04 release.')
+          PY
