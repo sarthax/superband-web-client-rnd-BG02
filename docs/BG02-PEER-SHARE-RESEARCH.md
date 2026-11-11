@@ -121,7 +121,7 @@ The first passive inspector incorrectly read **byte offset 3** as the opcode. Th
 
 \`FE DC BA | flags@3 | opcode@4 | lengthBE16@5–6 | body | EF\`.
 
-That bug did **not** cause the owner's two zero-notify results, because no notifications arrived. It would have misclassified nonempty ones. The repaired code uses a bounded frame parser, validates body length/end marker, and reassembles fragmented notifications. Seven offline tests pass locally, including known sample traffic, fragment boundaries, and JSONL inspection.
+That bug did **not** cause the owner's two zero-notify results, because no notifications arrived. It would have misclassified nonempty ones. The repaired code uses a bounded frame parser, validates body length/end marker, and reassembles fragmented notifications. Nine offline tests pass locally (seven framing/JSONL checks plus two fake-BLE checks verifying zero application writes in passive mode and exactly one identity request in explicit probe mode), including known sample traffic, fragment boundaries, and JSONL inspection.
 
 References for header layout and an actual target-info request captured from a *related* device:
 - https://github.com/jumpingmushroom/e87_badge/blob/main/docs/protocol.md (JieLi application-layer FE framing on AE01/AE02)
