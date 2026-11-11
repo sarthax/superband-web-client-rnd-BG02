@@ -75,6 +75,16 @@ In the official resource comparison, one 188 KB source GIF became 431 KB in a ve
 5. Cross-check discovered command IDs and GATT UUIDs against the user's BG02 services and any known V35922 firmware. No flashing or arbitrary writes.
 6. If the **receiving peripheral contract** is complete, create a stand-alone PC/ESP32 receiver. Windows Bleak is a BLE *central/client*, not a generic BLE-peripheral/GATT-server implementation. Use BlueZ peripheral mode or suitable ESP32 firmware as necessary, with a capture-only receiver first.
 
+### Optional single-pass source audit (no device access)
+
+The repository includes `tools/scan_bg02_share_sources.py`. If the vanilla or peer-demo SDK sources are available locally, it ranks C/headers, Java/Kotlin, and other text files containing the exact vendor symbols and likely peer/RCSP roles:
+
+```powershell
+py -3 tools/scan_bg02_share_sources.py "D:\\Claude\\JieLi\\e_badge_707_sdk_200" --limit 30 --json "D:\\Claude\\scratch\\bg02-share-sources.json"
+```
+
+Provide the **directory containing extracted source files** (not an OTA zip or raw `app.bin`). The script is standard-library only, reads files without changing them, and reports candidate filenames and source line numbers. It never connects to Bluetooth. A zero-result scan of the vanilla SDK only means the feature might live in a separate demo patch or binary library.
+
 ## What to implement only after source proof
 
 - A safe **Get stored media** command in the web manager, **if** a stock BG02 GATT readback service exists.
