@@ -130,13 +130,35 @@ The [ElectronicCats DG01-specific client](https://github.com/ElectronicCats/jiel
 - Every **filesystem browse/read, file-transfer/delete, flash, OTA, raw-FitPro and unrelated RCSP opcode** is blocked by a transport-level allowlist. No retries; exceptions are reduced to diagnostic type and packet counts.
 - [Offline CI run](https://github.com/sarthax/superband-web-client-rnd-BG02/actions/runs/42961567725): **15/15 passed** (6 new guard tests plus 9 RCSP/parser/retired-command tests). **No real BG02 authentication was attempted.**
 
-**Optional Windows proof, only from the updated PR #4 research checkout after closing SuperBand and the browser manager:**
+**Windows setup (verified workaround for a real Git filename-length failure).** The earlier one-line `uv run --with "qix-ble @ git+..."` **must not be used on Windows**: `uv` recursively initializes unrelated repository submodules, and the giant JieLi firmware SDK checkout fails with `Filename too long`. The authentication library itself does **not** require either submodule. Use a sparse, nonrecursive checkout followed by a local package install.
 
 ```powershell
-uv run --native-tls --with bleak --with "qix-ble @ git+https://github.com/ElectronicCats/jieli-ble-badge-research.git@1802a8860d87f02c4c8562721f49ee85f1031dce#subdirectory=tools/qix-ble" python tools/bg02_ae00_auth_probe.py --connect
+# Download the pinned MIT-licensed library source, without ANY submodules.
+cd D:\\Claude\\scratch
+git clone --filter=blob:none --sparse --no-recurse-submodules https://github.com/ElectronicCats/jieli-ble-badge-research.git jieli-badge-src
+cd .\\jieli-badge-src
+git checkout 1802a8860d87f02c4c8562721f49ee85f1031dce
+git sparse-checkout set tools/qix-ble
+
+# From your local research branch checkout.
+cd D:\\Claude\\superband-bg02-research
+git fetch origin
+git switch research/bg02-peer-share-readback
+git pull --ff-only
+uv venv --python 3.12 .venv-bg02
+uv pip install --native-tls --python ".\\.venv-bg02\\Scripts\\python.exe" bleak "D:\\Claude\\scratch\\jieli-badge-src\\tools\\qix-ble"
+
+# Verify imports and perform NO BLE connection.
+& .\\.venv-bg02\\Scripts\\python.exe -c "from bleak import BleakClient; from qix_ble.auth import AuthSession; from qix_ble.sysinfo import get_target_info; print('Dependencies OK')"
+& .\\.venv-bg02\\Scripts\\python.exe .\\tools\\bg02_ae00_auth_probe.py
+
+# After closing SuperBand and the browser manager, one opt-in hardware test:
+& .\\.venv-bg02\\Scripts\\python.exe .\\tools\\bg02_ae00_auth_probe.py --connect
 ```
 
-The external dependency is pinned to a concrete public commit (MIT), and this command sends **at most the three authentication writes and one identity request**. This is still an *unverified* live compatibility experiment: a timeout or error should be treated as a STOP, not an invitation to retry or guess other opcodes. If auth succeeds but target information fails, the result narrows the next task to protocol initialization. If both succeed, the next task is to establish whether wallpaper storage is browsable, not to immediately display a Download button.
+If the `jieli-badge-src` destination already exists from a partial attempt, inspect it or remove just that unused clone before restarting; do not overwrite unrelated directories. This sequence keeps the pinned source version while avoiding `uv`'s recursive Git submodule initialization. `git config core.longpaths true` alone is not the preferred fix because the huge SDK checkout is unnecessary.
+
+The external dependency is pinned to a concrete public commit (MIT), and the optional live command sends **at most the three authentication writes and one identity request**. This is still an *unverified* live compatibility experiment: a timeout or error should be treated as a STOP, not an invitation to retry or guess other opcodes. If auth succeeds but target information fails, the result narrows the next task to protocol initialization. If both succeed, the next task is to establish whether wallpaper storage is browsable, not to immediately display a Download button.
 
 ## Public JieLi SDK source code: server-side file readback exists
 
