@@ -2,6 +2,12 @@
 
 Status: **RESEARCH ONLY**. No BLE writes, firmware flashing, source changes to the working JPG/PNG → RU50 uploader, or claim of a verified BG02 readback API.
 
+## Android full bug report — actual HCI traffic (2026-11-11)
+
+The owner's Android 16 bug report contains a valid HCI snoop log (**4,612 records**, **1,055,441 bytes**) and SuperBand app logs. It shows BG02 discovered and connected, then a **successful SuperBand JPEG upload from phone to badge** on **7E400002/003**, with `0x1F` upload packets and `0x20` status acknowledgments **1000–1002**. There were **no AE01 writes or AE02 notification subscriptions** in this phone session and no observed peer-sharing transfer. This is not contradictory to the separately authenticated Windows probe.
+
+**Privacy-safe evidence:** [BG02 Android HCI report](BG02-ANDROID-HCI-BUGREPORT-2026-11-11.md). The raw user bug-report ZIP is **not** in GitHub because it contains sensitive Android device/app data and uploaded image bytes. Android's own Bluetooth HCI snoop **cannot capture an independent BG02-to-BG02 session**, so do not interpret the missing peer traffic as disabled sharing. No `wallpaper_adv` advertisements were observed, but no controlled Receive-mode phase label was provided.
+
 ## Current next gate: passive receiver advertisement comparison (2026-11-10)
 
 **Updated hardware evidence:** The owner successfully completed the six-step JieLi AE00 authentication repeatedly, including with BG02 Send and Receive Picture selected. The `GET_TARGET_INFO` `0x03` command then generated **zero AE02 post-auth notifications**, timing out. A locally modified probe added `--raw-log`; that local code is **not** in this GitHub branch. Do not pull/reset/overwrite the user's in-progress instrumented files or repeat the authenticated query without new evidence.
