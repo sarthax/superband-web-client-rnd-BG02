@@ -468,7 +468,7 @@ async function pushImage() {
       toast('RU50 experiment requires a confirmed BG02/LJ733 FitPro badge', 'err');
       return;
     }
-    log({ msg: 'EXPERIMENTAL BG02 RU50 transfer; ACK success does not guarantee image renders', level: 'warn' });
+    log({ msg: 'BG02 RU50/ETC2 image transfer', level: 'info' });
   }
   const activeSnapshot = client.getSnapshot();
   if (!imageMatchesBadge(prepared, resolveBadgeProfile(activeSnapshot), activeSnapshot)) {
@@ -482,8 +482,20 @@ async function pushImage() {
   transferring = true;
   updatePushChecklist();
   try {
+    let uploadBytes = prepared.bytes;
+    if (prepared.source === 'crop') {
+      log({ msg: 'Cropping and converting the picture for BG02…', level:'info' });
+      uploadBytes = await encodeImageDataRu50(cropper.getImageData(240));
+      const snapshot = client.getSnapshot();
+      if (!client.connected || snapshot.sessionId !== activeSnapshot.sessionId ||
+          !resolveBadgeProfile(snapshot).bg02) {
+        throw new Error('Badge changed during image conversion; reconnect and try again');
+      }
+      inspectRu50(uploadBytes);
+      log({ msg: `Image encoded: ${formatBytes(uploadBytes.length)} RU50/ETC2`, level:'ok' });
+    }
     const functionType = Number($('#functionType').value) || FunctionType.BACKGROUND;
-    const result = await client.transferFile(prepared.bytes, {
+    const result = await client.transferFile(uploadBytes, {
       fileType: FileType.IMAGE,
       functionType,
       allocateId: $('#allocMedia').checked,
