@@ -70,9 +70,52 @@ In the official resource comparison, a **188 KB input GIF** became **431 KB** as
 
 The app-interface document identifies **JieLi_Health_SDK_Android_1.14.0_beta1+**, iOS **JieLi_Health_SDK_iOS_V1.12.0+** and vendor video-packing libraries; it says developers should request the materials from JieLi. These are **vendor SDK releases**, not confirmation of versions bundled in the current SuperBand APK. Vendor notes say GIF requires app-side conversion to JieLi's supported format, and AVI playback supports MJPEG video/PCM audio in its local-video demo.
 
+## Evidence recovered directly from vendor code screenshots (2026-11-10)
+
+The JieLi 707N sharing-demo page embeds screenshots with **actual C source names and statements**. These screenshots are useful, but were taken from the **JieLi demo**, not BG02 V35922.
+
+| Exact demo location / symbol | Observed behavior / meaning | Evidence |
+|---|---|---|
+| `apps/common/ui/lcd/lcd_ui_api.c` (around 571) | A UI key handler invokes `ble_client_module_enable(1)` for peer discovery | [demo screenshot](https://doc.zh-jieli.com/KDocs/master/assets/img/img_6.b105597a.png) |
+| `apps/watch/board/br35/board_ac707n_demo/board_ac707n_demo_cfg.h` | `TCFG_JL_WALLPAPER_ENABLE` enabled; `TCFG_JL_WALLPAPER_ADV_NAME` is set to **`"wallpaper_adv"`** | [demo screenshot](https://doc.zh-jieli.com/KDocs/master/assets/img/img_7.ea2da850.png) |
+| `apps/common/ui/lcd/lcd_ui_api.c` (around 606–612) | `jl_wallpaper_sharing_send(void)` is posted as a callback to the `app_core` task | [demo screenshot](https://doc.zh-jieli.com/KDocs/master/assets/img/img_8.366d4975.png) |
+| Editor tabs in the demo | Source modules `wallpaper_sharing_main.c` and `wallpaper_sharing.h` exist in the demo | [demo screenshot](https://doc.zh-jieli.com/KDocs/master/assets/img/img_6.b105597a.png) |
+| Wallpaper management data structures | A linked list holds local **wallpaper file paths**; config references `storage/virfat_flash/C/` and `wp_cfg.bin` with a demo maximum of **100** items (not a BG02 capacity claim) | [demo screenshot](https://doc.zh-jieli.com/KDocs/master/assets/img/img_10.2427c024.png) |
+
+**Implications:** the demo receiver can be identified by an advertisement name, and the sender's scan is explicitly enabled by UI code. `wallpaper_adv` is a **demo build option**, not a verified required name on BG02. We **do not** have the complete `wallpaper_sharing_main.c` body, packet layout, UUIDs, or incoming data handler, so claiming a working PC receiver from these snippets would be premature.
+
+**Source availability:** the vendor page links old ZIP releases using struck-through links, and the public GitLab repository was unavailable from this environment. The independently verified vanilla SDK commit `d0167685d032d745d88fe50233302edd46941622` belongs to the *baseline SDK*, whereas the peer-sharing demo is described as **200patch02 or later**. A vanilla SDK tree may not contain these demo functions. Do not use a public firmware image from another board.
+
+## Alternative first-choice research track: RCSP on-device file browsing/readback
+
+The official open-source **JieLi Android Bluetooth SDK** documents `IFileOp` methods (SDK v4.2.0):
+
+- `getOnlineStorage()` — list exposed storage volumes.
+- `listFiles(device, folder, offset, readNum, callback)` — list file metadata, 1–30 entries per page.
+- `readBigFile(ReadFileParam, OnTaskStateListener)` — receive file bytes from a device.
+- `createBigFile(...)` — send file to a device.
+- `deleteFile(...)` and `formatStorage(...)` — **destructive** operations; out of scope.
+
+Primary SDK interface:
+https://github.com/Jieli-Tech/Android-JL_Bluetooth/blob/main/doc/JieLi_Home_SDK_V4.2.0_html_en/html/_sources/development/api/file_op_api.rst.txt
+
+SDK documentation of directory browsing:
+https://github.com/Jieli-Tech/Android-JL_Bluetooth/blob/main/doc/JieLi_Home_SDK_V4.2.0_html_en/html/_sources/development/function/file_browse_func.rst.txt
+
+Example app implementation (`FileBrowseManager` for storage/music):
+https://github.com/Jieli-Tech/Android-JL_Bluetooth/blob/main/code/PiHome_V1.13.0_SDK_V4.2.0/btsmart/src/main/java/com/jieli/btsmart/ui/music/device/FilesFragment.java
+
+**Critical capability gate:** JieLi RCSP is a broader protocol/framework than the known working BG02 **FitPro Dial31** transport. These interfaces do not establish that BG02 exposes a compatible RCSP file service, advertises an online volume, or permits reading its wallpaper partition. The example file browser is primarily for storage/music, not explicitly BG02 images. `AE00` is an OTA-related GATT service; `4A02` and `7E40...004` are not proven RCSP file interfaces. No guessed vendor commands should be sent.
+
+### Recommended decision order
+
+1. **Source-only check:** identify the RCSP `ReadFileParam` format, capability gate, and device-side counterpart. Check whether a **BG02-compatible** firmware / SuperBand implementation advertises RCSP file browsing or wallpaper readback. If yes, this would be a direct native **Download from Badge** path; pursue this first.
+2. **Source-only peer fallback:** obtain the 200patch02+ peer-sharing module, find BLE advertising and receiver contract. Only if the standard file-read path is absent, build a safe, isolated receiver.
+3. **Hardware gate only after code proof:** connect, enumerate volumes (no deletions or OTA), and try retrieving one known harmless user image. Distinguish GATT reads from a true file-transfer protocol.
+
 ## Specific code locations to inspect next (read-only)
 
-1. Obtain the relevant **peer-sharing demo SDK source**, not just vanilla `e_badge_707_sdk_200`. Ask source search to find these exact symbols:
+1. Prioritize the **documented RCSP file-read APIs** and whether BG02 advertises that capability (source review, no speculative wire commands). In parallel, obtain the relevant **peer-sharing demo SDK source**, not just vanilla `e_badge_707_sdk_200`. Search these exact symbols:
    `TCFG_JL_WALLPAPER_ENABLE`, `jl_wallpaper_add`, `jl_wallpaper_set_by_name`, `jl_wallpaper_remove_using`, `jl_wallpaper_save`, `jl_wallpaper_load`.
 2. Trace **peer role entry**, advertiser/scan filtering by name, connection establishment, characteristic/service UUIDs, and the transition triggered by double-click or Share/Receive mode.
 3. Identify the **file-streaming callbacks** and the source path that serves the active or selected wallpaper; record whether a file is copied intact or transcoded.
