@@ -188,6 +188,8 @@ function applyBadgeProfile(snapshot = client.getSnapshot()) {
 
   $('#dialW').disabled = profile.fixedSize;
   $('#dialH').disabled = profile.fixedSize;
+  $('#dialWidthOption').hidden = profile.bg02;
+  $('#dialHeightOption').hidden = profile.bg02;
   $('#dialWidthOption').title = profile.fixedSize ? 'Fixed for the BG02 display' : '';
   $('#dialHeightOption').title = profile.fixedSize ? 'Fixed for the BG02 display' : '';
   $('#imageInput').accept = profile.fileAccept;
