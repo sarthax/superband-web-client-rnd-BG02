@@ -113,6 +113,38 @@ https://github.com/Jieli-Tech/Android-JL_Bluetooth/blob/main/code/PiHome_V1.13.0
 2. **Source-only peer fallback:** obtain the 200patch02+ peer-sharing module, find BLE advertising and receiver contract. Only if the standard file-read path is absent, build a safe, isolated receiver.
 3. **Hardware gate only after code proof:** connect, enumerate volumes (no deletions or OTA), and try retrieving one known harmless user image. Distinguish GATT reads from a true file-transfer protocol.
 
+## Offline compatibility audit — November 10 follow-up
+
+Added `tools/bg02_firmware_evidence.py`: a Windows-compatible, standard-library-only, read-only scanner of ZIP members, UFWs and extracted binaries. It outputs SHA-256, member-relative offsets, and string hints for wallpaper sharing, wallpaper storage, RCSP file browsing, authentication, and BLE transport. No BLE access, flash commands or network access.
+
+One command (from the project root, with the two existing archives):
+
+```powershell
+py -3 tools/bg02_firmware_evidence.py research/firmware/lj733_V27550.zip research/firmware/lj733b_V34574.zip --json-out "D:\Claude\scratch\bg02_firmware_evidence.json"
+```
+
+To inspect extracted firmware instead, pass `research/firmware/analysis` if previously unpacked.
+
+**Critical limitation:** an `app.ufw` is a *packed firmware container*. Plaintext scanning its raw bytes can miss handlers buried in the unpacked `app.bin`. A missing keyword is **not** evidence that a capability is absent. This tool does not unpack UFW or disassemble code. Six offline test cases were committed but not executed during this research turn. We do not have BG02 V35922 `app.bin`; the older LJ733 archives cannot prove V35922 behavior.
+
+### Comparable public AC707N implementation — not the same BG02
+
+The [ElectronicCats AC707N E87/DG01 implementation](https://github.com/ElectronicCats/jieli-ble-badge-research) targets **360×360** E87/DG01, not our BG02 **240×240, firmware V35922**. It contains a six-step cryptographic AE01/AE02 handshake; an auth-gated RCSP target-info `0x03`; auth-gated browse `0x0C` of USB/SD0/SD1/FLASH; and small-file read `0x28`. Its source also notes DG01 browse attempts that returned zero entries because no browsable storage was mounted. Thus even successful RCSP auth would not imply wallpaper file access.
+
+- [Authentication source](https://github.com/ElectronicCats/jieli-ble-badge-research/blob/main/tools/qix-ble/qix_ble/auth.py)
+- [RCSP filesystem source](https://github.com/ElectronicCats/jieli-ble-badge-research/blob/main/tools/qix-ble/qix_ble/rcsp_session.py)
+- [Peer-wallpaper demo](https://doc.zh-jieli.com/KDocs/master/手表穿戴技术应用文档入口汇总/707电子吧唧开发资料/707N蓝牙互传图传demo/)
+
+The peer-wallpaper demo uses its own wallpaper path/list management and says apps may require custom RCSP or BLE commands to add and delete wallpapers. **Generic media browsing and wallpaper retrieval must be proven independently**, not assumed from a functional authenticated session.
+
+### Evidence gate for the next device experiment
+
+1. Unpack BG02-compatible firmware (prefer exact V35922), then trace relevant authentication and wallpaper-sharing handlers; strings alone are not call-graph proof.
+2. If protocol compatibility is established, prepare an isolated auth → identity `0x03` client and one bounded hardware test.
+3. If generic storage browsing is unrelated to wallpaper storage, pivot to the receiver-side handshake in `wallpaper_sharing_main.c` rather than further RCSP guesses.
+
+**No further live Bluetooth test requested right now.**
+
 ## Corrected RCSP opcode and observed hardware results (2026-11-10)
 
 ### Hardware results: both active attempts were silent
