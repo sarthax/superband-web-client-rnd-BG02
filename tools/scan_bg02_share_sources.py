@@ -21,8 +21,9 @@ PATTERNS = {
     'media-path': re.compile(r'(?:bgp_wa%d\.avi|\.ru50|\.vie|\.gif|\.avi)', re.I),
     'wallpaper-generic': re.compile(r'\bwallpaper\b|壁纸', re.I),
     'file-transfer': re.compile(r'(?:rcsp.{0,35}(?:file|transfer)|(?:file|transfer).{0,35}rcsp|file_send|file_receive)', re.I),
+    'file-read-sdk': re.compile(r'\b(?:readBigFile|ReadFileParam|listFiles|getOnlineStorage|FileBrowseManager|FileOpImpl)\b'),
 }
-WEIGHTS = {'wallpaper-symbol': 12, 'peer-entry': 20, 'peer-advert': 13, 'peer-sharing': 9, 'peer-ble-role': 5, 'media-path': 2, 'wallpaper-generic': 2, 'file-transfer': 3}
+WEIGHTS = {'wallpaper-symbol': 12, 'peer-entry': 20, 'peer-advert': 13, 'peer-sharing': 9, 'peer-ble-role': 5, 'media-path': 2, 'wallpaper-generic': 2, 'file-transfer': 3, 'file-read-sdk': 10}
 
 
 def inspect(root: Path, max_bytes: int, max_matches: int) -> list[dict]:
