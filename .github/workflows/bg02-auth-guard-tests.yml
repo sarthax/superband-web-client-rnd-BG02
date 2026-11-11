@@ -1,0 +1,29 @@
+name: BG02 bounded AE00 authentication guard tests
+
+on:
+  push:
+    branches: [research/bg02-peer-share-readback]
+    paths:
+      - '.github/workflows/bg02-auth-guard-tests.yml'
+      - 'tools/bg02_ae00_auth_probe.py'
+      - 'tools/tests/test_bg02_ae00_auth_probe.py'
+      - 'tools/bg02_rcsp_protocol.py'
+      - 'tools/bg02_rcsp_observe.py'
+      - 'tools/tests/test_bg02_rcsp_observe.py'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify auth write allowlist with fake BLE transport
+        run: python3 -m unittest discover -s tools/tests -p 'test_bg02_ae00_auth_probe.py' -v
+      - name: Verify corrected RCSP parser and disabled unauthenticated probes
+        run: python3 -m unittest discover -s tools/tests -p 'test_bg02_rcsp_observe.py' -v
+      - name: Assert no live BLE invocation is part of CI
+        run: |
+          echo 'OFFLINE_ONLY: no Bleak installed, no badge connected, no secret material'
