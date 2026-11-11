@@ -17,12 +17,12 @@ from bg02_rcsp_observe import inspect  # noqa: E402
 
 class RcspFramingTests(unittest.TestCase):
     def test_target_info_request_is_exact_known_read_only_frame(self):
-        self.assertEqual(TARGET_INFO_REQUEST.hex(), "fedcbac002000501ffffffffef")
+        self.assertEqual(TARGET_INFO_REQUEST.hex(), "fedcbac003000601ffffffff00ef")
         result = parse_frame(TARGET_INFO_REQUEST)
         self.assertIsNotNone(result)
-        self.assertEqual(result["opcode"], "0x02")
+        self.assertEqual(result["opcode"], "0x03")
         self.assertEqual(result["flags"], "0xc0")
-        self.assertEqual(result["body_length"], 5)
+        self.assertEqual(result["body_length"], 6)
         self.assertEqual(result["possible_serial"], 1)
 
     def test_previous_off_by_one_opcode_bug_is_fixed(self):
@@ -36,13 +36,13 @@ class RcspFramingTests(unittest.TestCase):
         self.assertNotIn("possible_rcsp_opcode", describe_bytes(b"\xfe\xdc\xba\xc0"))
 
     def test_split_and_coalesced_reassembly(self):
-        frame = bytes.fromhex("fe dc ba 00 02 00 03 00 01 05 ef")
+        frame = bytes.fromhex("fe dc ba 00 03 00 03 00 01 05 ef")
         assembler = FrameAssembler()
         self.assertEqual(assembler.feed(frame[:2]), [])
         self.assertEqual(assembler.feed(frame[2:8]), [])
         pair = assembler.feed(frame[8:] + frame)
         self.assertEqual(len(pair), 2)
-        self.assertEqual(pair[0]["opcode"], "0x02")
+        self.assertEqual(pair[0]["opcode"], "0x03")
         self.assertEqual(pair[0]["possible_status"], "0x00")
 
     def test_reject_invalid_frame(self):
@@ -61,7 +61,7 @@ class RcspFramingTests(unittest.TestCase):
             path = Path(tmp) / "events.jsonl"
             records = [
                 {"stream": "ae01", "direction": "tx", "hex": TARGET_INFO_REQUEST.hex()},
-                {"stream": "ae02", "direction": "rx", "hex": "fedcba00020003000105ef"},
+                {"stream": "ae02", "direction": "rx", "hex": "fedcba00030003000105ef"},
             ]
             path.write_text("\n".join(json.dumps(r) for r in records), encoding="utf-8")
             self.assertEqual(inspect(path), 0)
@@ -110,7 +110,7 @@ class FakeBleakClient:
 
 
 class ActiveReadOnlyGateTests(unittest.IsolatedAsyncioTestCase):
-    async def run_observation(self, probe):
+    async def run_observation(self):
         import types
         from unittest.mock import AsyncMock, patch
         import bg02_rcsp_observe as observer
@@ -119,23 +119,21 @@ class ActiveReadOnlyGateTests(unittest.IsolatedAsyncioTestCase):
             fake_bleak = types.SimpleNamespace(BleakClient=FakeBleakClient)
             with patch.dict(sys.modules, {"bleak": fake_bleak}), \
                  patch.object(observer, "locate", AsyncMock(return_value=types.SimpleNamespace(name="BG02"))):
-                result = await observer.observe("BG02", 0.001, path, False, probe)
+                result = await observer.observe("BG02", 0.001, path, False)
             return result, list(FakeBleakClient.last.writes), list(FakeBleakClient.last.subscriptions)
 
     async def test_default_mode_never_writes_application_commands(self):
-        result, writes, subscriptions = await self.run_observation(False)
+        result, writes, subscriptions = await self.run_observation()
         self.assertEqual(result, 0)
         self.assertEqual(writes, [])
         self.assertEqual(subscriptions, ["0000ae02-0000-1000-8000-00805f9b34fb"])
 
-    async def test_active_mode_sends_exactly_one_identity_request(self):
-        result, writes, subscriptions = await self.run_observation(True)
-        self.assertEqual(result, 0)
-        self.assertEqual(len(writes), 1)
-        self.assertEqual(writes[0][1], TARGET_INFO_REQUEST)
-        self.assertFalse(writes[0][2])
-        self.assertEqual(len(subscriptions), 1)
-
+    async def test_retired_active_probe_never_connects(self):
+        from unittest.mock import patch
+        import bg02_rcsp_observe as observer
+        with patch.object(sys, "argv", ["bg02_rcsp_observe.py", "--probe-target-info"]):
+            self.assertEqual(observer.main(), 4)
+        # main exits before importing Bleak or opening a connection.
 
 
 
