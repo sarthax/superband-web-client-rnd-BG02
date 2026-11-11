@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Short BG02 AE02 observer with optional one-shot read-only target-info query.
+"""BG02 AE02 passive observer and offline RCSP frame inspector.
 
-Default: subscribe to AE02, no application commands. With explicit
---probe-target-info: send one fixed JieLi identity request to AE01, no retries.
-Neither mode establishes that BG02 exposes its media filesystem.
+No application commands are sent. The old --probe-target-info switch is
+RETIRED and fails before opening Bluetooth: opcode 0x02 was incorrectly
+labelled as GET_TARGET_INFO; actual GET_TARGET_INFO is 0x03 and may require
+a successful app-layer authentication before it can be queried.
 
 From the repository root, on Windows:
-  uv run --native-tls --with bleak python tools/bg02_rcsp_observe.py --device BG02 --probe-target-info --seconds 8 --output bg02_target_info.jsonl
-  py -3 tools/bg02_rcsp_observe.py --inspect bg02_target_info.jsonl
+  uv run --native-tls --with bleak python tools/bg02_rcsp_observe.py --device BG02 --seconds 8
+  py -3 tools/bg02_rcsp_observe.py --inspect bg02_rcsp_observe.jsonl
 """
 from __future__ import annotations
 
@@ -20,10 +21,9 @@ import re
 import sys
 import time
 
-from bg02_rcsp_protocol import FrameAssembler, TARGET_INFO_REQUEST, describe_bytes
+from bg02_rcsp_protocol import FrameAssembler, describe_bytes
 
 AE00 = "0000ae00-0000-1000-8000-00805f9b34fb"
-AE01 = "0000ae01-0000-1000-8000-00805f9b34fb"
 AE02 = "0000ae02-0000-1000-8000-00805f9b34fb"
 UART = "7e400001-b5a3-f393-e0a9-e50e24dcca9d"
 UART_NOTIFY = "7e400003-b5a3-f393-e0a9-e50e24dcca9d"
@@ -73,7 +73,7 @@ async def locate(target: str):
     )
 
 
-async def observe(target: str, seconds: float, path: Path, also_uart: bool, probe: bool) -> int:
+async def observe(target: str, seconds: float, path: Path, also_uart: bool) -> int:
     try:
         from bleak import BleakClient
     except ImportError:
@@ -84,10 +84,6 @@ async def observe(target: str, seconds: float, path: Path, also_uart: bool, prob
     if dev is None:
         print(f"Device {target!r} was not discovered.", file=sys.stderr)
         return 2
-    if probe and "BG02" not in (dev.name or "").upper():
-        print(f"Refusing active query: selected device name {dev.name!r} is not BG02.", file=sys.stderr)
-        return 2
-
     path.parent.mkdir(parents=True, exist_ok=True)
     counter: Counter[str] = Counter()
     decoders = {"ae02": FrameAssembler()}
@@ -126,19 +122,7 @@ async def observe(target: str, seconds: float, path: Path, also_uart: bool, prob
                     await client.start_notify(UART_NOTIFY, capture("7e400003"))
                 except Exception as exc:
                     print(f"Optional UART notification subscription failed: {exc}")
-            if probe:
-                service = client.services.get_service(AE00)
-                char = service.get_characteristic(AE01) if service else None
-                if char is None or not ("write-without-response" in char.properties or "write" in char.properties):
-                    print("AE01 writable characteristic not found; no active query sent.", file=sys.stderr)
-                    return 3
-                # Explicitly allow only this known read-only request. Exactly one write.
-                await client.write_gatt_char(AE01, TARGET_INFO_REQUEST,
-                                             response="write-without-response" not in char.properties)
-                write_event("ae01", TARGET_INFO_REQUEST, "tx")
-                print("Sent ONE RCSP target-info query (opcode 0x02); listening for response.")
-            else:
-                print("Passive observation only; no application commands sent.")
+            print("Passive observation only; no application commands sent.")
             await asyncio.sleep(seconds)
     print(f"Saved {sum(counter.values())} event(s) to {path} (AE02 RX: {counter['ae02']}).")
     if not counter["ae02"]:
@@ -153,15 +137,20 @@ def main() -> int:
     ap.add_argument("--seconds", type=float, default=8.0)
     ap.add_argument("--output", type=Path, default=Path("bg02_rcsp_observe.jsonl"))
     ap.add_argument("--also-uart", action="store_true", help="Add FitPro UART notification; no commands")
-    ap.add_argument("--probe-target-info", action="store_true", help="Send ONE known read-only RCSP target-info command to AE01")
+    ap.add_argument("--probe-target-info", action="store_true", help="RETIRED: unsafe without verified BG02 authentication; immediately refuses")
     ap.add_argument("--inspect", type=Path, help="Offline inspect saved JSONL (no BLE)")
     args = ap.parse_args()
     if args.inspect:
         return inspect(args.inspect)
+    if args.probe_target_info:
+        print("Target-info probe retired: the former 0x02 command was misidentified; "
+              "the real 0x03 request may require authentication. No BLE connection "
+              "or application write was made.", file=sys.stderr)
+        return 4
     if not 1 <= args.seconds <= 120:
         ap.error("--seconds must be 1–120 seconds")
     try:
-        return asyncio.run(observe(args.device, args.seconds, args.output, args.also_uart, args.probe_target_info))
+        return asyncio.run(observe(args.device, args.seconds, args.output, args.also_uart))
     except (OSError, RuntimeError, TimeoutError) as exc:
         print(f"Diagnostic failed: {exc}", file=sys.stderr)
         return 2
