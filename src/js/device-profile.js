@@ -35,10 +35,10 @@ export function resolveBadgeProfile(snapshot = {}) {
     fileAccept: bg02 ? 'image/*,.ru50' : 'image/*',
     chooseLabel: bg02 ? 'Choose photo' : 'Choose image',
     formatLabel: bg02
-      ? 'BG02 · 240×240 · automatic RU50/ETC2'
+      ? 'BG02 · round 240×240 picture'
       : jpeg ? 'JPEG 4:4:4' : 'RGB565',
     formatHelp: bg02
-      ? 'Choose a JPG, PNG or WebP photo, drag to position it inside the round badge, adjust zoom, then upload. The image is cropped to 240×240 and converted to RU50/ETC2 automatically. Pre-encoded .ru50 files are also accepted.'
+      ? 'Choose a photo, drag to move it inside the circle, zoom as needed, then upload. The picture is resized and converted automatically.'
       : jpeg
         ? 'Images are cropped to the selected size and encoded as JPEG 4:4:4 before uploading.'
         : 'Images are cropped to the selected size and encoded as RGB565. For badges without reported dimensions, 360×360 is only a fallback.',
