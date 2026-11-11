@@ -113,6 +113,31 @@ https://github.com/Jieli-Tech/Android-JL_Bluetooth/blob/main/code/PiHome_V1.13.0
 2. **Source-only peer fallback:** obtain the 200patch02+ peer-sharing module, find BLE advertising and receiver contract. Only if the standard file-read path is absent, build a safe, isolated receiver.
 3. **Hardware gate only after code proof:** connect, enumerate volumes (no deletions or OTA), and try retrieving one known harmless user image. Distinguish GATT reads from a true file-transfer protocol.
 
+## November 10 source and catalog resolution: direct readback candidate
+
+### Checked source and catalog facts
+
+- [Source inventory CI](https://github.com/sarthax/superband-web-client-rnd-BG02/actions/runs/42960677683) and [vendor RCSP file-handler CI](https://github.com/sarthax/superband-web-client-rnd-BG02/actions/runs/42960880393) read official public JieLi GitLab project **1463**, `e_badge_707_sdk_200` `main`. Source files `rcsp_browser.c`, `file_trans_back.c`, and `file_transfer.c` are present. Source symbols include `file_trans_back_task`, `rcsp_file_trans_back_opt`, `fopen` and `fread`. The generic vendor framework implements a device-to-host file-return path; **BG02 firmware feature enablement remains unverified**.
+- [Peer path and OTA check CI](https://github.com/sarthax/superband-web-client-rnd-BG02/actions/runs/42961091959) searched targeted `SDK/apps/common/ui/lcd`, `SDK/apps/common/ui` (first 600 paths, cap reached), `SDK/apps/watch/board/br35/board_ac707n_demo`, and `SDK/apps/watch` for peer-sharing filenames. No matching paths were observed in the sampled public `main` tree. This is **not an exhaustive source-tree check**, nor is `main` guaranteed to contain the demo's **200patch04** files. The project has only a `main` branch and no public tags as of this inspection; the README links the demo's 200patch04 archive separately.
+- One exact official SuperBand OTA **upgrade-catalog** query with `name=BG02`, `version=V35922` returned **no upgrade offered**. The endpoint answers *what upgrade is available FROM the supplied version*, not *where to download that version*. This does **not** demonstrate that the V35922 image is unavailable elsewhere, and it did not download or flash anything.
+
+### New controlled Windows authentication diagnostic
+
+The [ElectronicCats DG01-specific client](https://github.com/ElectronicCats/jieli-ble-badge-research/blob/main/tools/baji-ble/baji_ble/sysinfo_probe.py) has an `AE00`-only six-step handshake and target-info query without the E87 `FD00` bootstrap. Its source is MIT-licensed. Our new `tools/bg02_ae00_auth_probe.py` reuses that **pinned external `qix-ble` dependency** rather than duplicating a cryptographic algorithm. **This is an attempt to test BG02 compatibility, not a claim that BG02 uses the same key or policy.**
+
+- Without `--connect`, it is purely offline; no Bleak or qix dependency is needed.
+- With explicit `--connect`, it scans only for the exact `BG02` advertised name and confirms `AE00/AE01/AE02`. A worker-thread adapter attempts the related JieLi raw authentication exchange, strictly permitting only the three auth messages. If authentication succeeds, it sends one `GET_TARGET_INFO 0x03` request with the fixed mask and platform and returns **attribute names only** (not raw serial, auth key or MAC). Optional `--auth-only` stops after the handshake.
+- Every **filesystem browse/read, file-transfer/delete, flash, OTA, raw-FitPro and unrelated RCSP opcode** is blocked by a transport-level allowlist. No retries; exceptions are reduced to diagnostic type and packet counts.
+- [Offline CI run](https://github.com/sarthax/superband-web-client-rnd-BG02/actions/runs/42961567725): **15/15 passed** (6 new guard tests plus 9 RCSP/parser/retired-command tests). **No real BG02 authentication was attempted.**
+
+**Optional Windows proof, only from the updated PR #4 research checkout after closing SuperBand and the browser manager:**
+
+```powershell
+uv run --native-tls --with bleak --with "qix-ble @ git+https://github.com/ElectronicCats/jieli-ble-badge-research.git@1802a8860d87f02c4c8562721f49ee85f1031dce#subdirectory=tools/qix-ble" python tools/bg02_ae00_auth_probe.py --connect
+```
+
+The external dependency is pinned to a concrete public commit (MIT), and this command sends **at most the three authentication writes and one identity request**. This is still an *unverified* live compatibility experiment: a timeout or error should be treated as a STOP, not an invitation to retry or guess other opcodes. If auth succeeds but target information fails, the result narrows the next task to protocol initialization. If both succeed, the next task is to establish whether wallpaper storage is browsable, not to immediately display a Download button.
+
 ## Public JieLi SDK source code: server-side file readback exists
 
 **Verified against JieLi GitLab project 1463 (`e_badge_707_sdk_200`) using a read-only source metadata API and limited source-symbol extraction.**
