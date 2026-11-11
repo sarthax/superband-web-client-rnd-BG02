@@ -3,7 +3,7 @@ import { prepareFileForBadge, loadImage, formatBytes, DEFAULT_DIAL } from './ima
 import { inspectRu50, encodeImageDataRu50, looksLikeBg02 } from './ru50.js';
 import { CircleCropEditor } from './circle-crop.js';
 import { REPO_URL } from './protocol.js';
-import { resolveBadgeProfile, imageMatchesBadge } from './device-profile.js';
+import { resolveBadgeProfile, imageMatchesBadge, needsFreshPictureSelection } from './device-profile.js';
 import { bindAdvanced } from './advanced.js';
 
 const $ = (s) => document.querySelector(s);
@@ -13,6 +13,7 @@ const client = new SuperBandClient();
 let prepared = null;
 let transferring = false;
 let activeProfileKey = null;
+let activePictureSessionId = null;
 let previewGeneration = 0;
 const cropper = new CircleCropEditor({
   canvas: $('#cropCanvas'),
@@ -178,6 +179,14 @@ function dash(v) {
  */
 function applyBadgeProfile(snapshot = client.getSnapshot()) {
   const profile = resolveBadgeProfile(snapshot);
+  const nextSessionId = snapshot?.sessionId ?? null;
+  const sessionChanged = needsFreshPictureSelection(activePictureSessionId, nextSessionId);
+  activePictureSessionId = nextSessionId;
+  if (sessionChanged) {
+    // Requiring another deliberate photo selection avoids accidentally
+    // uploading the previous badge's picture to a newly active badge.
+    $('#imageInput').value = '';
+  }
   const key = [
     snapshot?.sessionId || '-', profile.id, profile.width, profile.height,
     profile.format,
@@ -302,8 +311,8 @@ function updatePushChecklist() {
     client.sessionCount >= 2 && canPush && !profile.bg02 &&
     prepared?.format !== 'ru50'
   );
-  $('#btnPickImage').disabled = !idle;
-  $('#imageInput').disabled = !idle;
+  $('#btnPickImage').disabled = !idle || !connected;
+  $('#imageInput').disabled = !idle || !connected;
   $('#cropZoom').disabled = !idle;
   $('#cropReset').disabled = !idle;
   $('#cropCanvas').style.pointerEvents = idle ? 'auto' : 'none';
