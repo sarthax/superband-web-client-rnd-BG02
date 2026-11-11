@@ -11,7 +11,9 @@ test('BG02 V1.5 always defaults to 240x240 RU50 without querying dial-info', () 
   assert.equal(profile.width, 240);
   assert.equal(profile.height, 240);
   assert.equal(profile.format, 'ru50');
-  assert.equal(profile.fileAccept, '.ru50');
+  assert.equal(profile.fileAccept, 'image/*,.ru50');
+  assert.equal(profile.chooseLabel, 'Choose photo');
+  assert.match(profile.formatHelp, /converted automatically/);
   assert.equal(profile.fixedSize, true);
   assert.equal(profile.showMediaLibrary, false);
   assert.equal(profile.showBajiOptions, false);
