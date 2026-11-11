@@ -2,6 +2,9 @@ name: Validate
 
 on:
   push:
+    branches:
+      - main
+      - master
     paths:
       - "src/**"
       - ".github/workflows/validate.yml"
@@ -10,6 +13,9 @@ on:
       - "src/**"
       - ".github/workflows/validate.yml"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -21,13 +27,14 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install and build client
+      - name: Install, test codecs and build client
         working-directory: src
         env:
-          BASE_PATH: /superband-web-client-rnd/
+          BASE_PATH: /superband-web-client-rnd-BG02/
         run: |
           set -euo pipefail
           bun install --frozen-lockfile
+          node --test tests/ru50.test.mjs tests/device-profile.test.mjs tests/browser-etc2.test.mjs
           bun run build
 
       - name: Check dist output
@@ -36,5 +43,5 @@ jobs:
           test -f src/dist/index.html
           test -f src/dist/.nojekyll
           test -f src/dist/404.html
-          grep -q '/superband-web-client-rnd/' src/dist/index.html
+          grep -q '/superband-web-client-rnd-BG02/' src/dist/index.html
           ls -la src/dist/
