@@ -104,3 +104,55 @@ jobs:
                             'STORAGE_PATHS',','.join(paths_found) or 'none')
           print('This is vendor-source triage only; no BG02 V35922 matching proof.')
           PY
+
+      - name: Locate 200patch04 peer-sharing source candidates
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error
+          from urllib.parse import urlencode
+          api='https://gitlab.zh-jieli.com/api/v4/projects/1463/repository/tree'
+          roots=('SDK/apps/common/ui/lcd','SDK/apps/common/ui','SDK/apps/watch/board/br35/board_ac707n_demo','SDK/apps/watch')
+          for root in roots:
+              total=0
+              candidates=[]
+              for page in range(1,7):
+                  qs=urlencode({'path':root,'ref':'main','recursive':'true','per_page':100,'page':page})
+                  try:
+                      req=urllib.request.Request(api+'?'+qs,headers={'User-Agent':'BG02-peer-source-lookup/1.0'})
+                      with urllib.request.urlopen(req,timeout=12) as res:
+                          rows=json.loads(res.read(1400000))
+                  except Exception as ex:
+                      print('PEER_SOURCE_LOOKUP_ERROR',root,type(ex).__name__,str(ex)[:90])
+                      break
+                  total+=len(rows)
+                  for row in rows:
+                      p=row.get('path','')
+                      if any(term in p.lower() for term in ('wallpaper','sharing','share_pic','share_file','peer_transfer','image_transfer')):
+                          candidates.append(p)
+                  if len(rows)<100: break
+              print('PEER_SOURCE_ROOT',root,'PATHS_INSPECTED',total,'CANDIDATES',len(candidates))
+              for p in candidates[:40]: print('  PEER_SOURCE_PATH',p)
+              if total==600: print('  PEER_SOURCE_LIMIT_REACHED')
+          print('These are only public SDK tree paths; demo 200patch04 might not be on main.')
+          PY
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Check only exact live firmware version in official SuperBand OTA catalog
+        shell: bash
+        run: |
+          set +e
+          bun tools/probe-ota.mjs --name BG02 --version V35922 --quiet >/tmp/bg02_ota_stdout.txt 2>/tmp/bg02_ota_stderr.txt
+          rc=$?
+          set -e
+          if grep -q '^OTA_URL=' /tmp/bg02_ota_stderr.txt; then
+            echo "OTA_CATALOG_V35922: UPGRADE_ROW_FOUND"
+            grep -E '^OTA_NAME=|^OTA_VERSION=' /tmp/bg02_ota_stderr.txt
+          elif [ "$rc" = 2 ]; then
+            echo "OTA_CATALOG_V35922: NO_UPGRADE_OFFERED_FOR_CURRENT_VERSION"
+          else
+            echo "OTA_CATALOG_V35922: QUERY_INDETERMINATE (exit $rc)"
+          fi
+          echo "Catalog is an upgrade lookup keyed by FROM version; no result does not rule out a V35922 firmware image."
