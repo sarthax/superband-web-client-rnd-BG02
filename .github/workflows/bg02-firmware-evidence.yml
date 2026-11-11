@@ -1,0 +1,55 @@
+name: BG02 firmware evidence (research only)
+
+on:
+  push:
+    branches:
+      - research/bg02-peer-share-readback
+    paths:
+      - '.github/workflows/bg02-firmware-evidence.yml'
+      - 'tools/bg02_firmware_evidence.py'
+      - 'tools/tests/test_bg02_firmware_evidence.py'
+      - 'research/firmware/lj733_V27550.zip'
+      - 'research/firmware/lj733b_V34574.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Six offline ZIP and text-anchor unit tests
+        run: python3 -m unittest discover -s tools/tests -p 'test_bg02_firmware_evidence.py' -v
+
+      - name: Scan two committed LJ733 firmware packages
+        run: |
+          python3 tools/bg02_firmware_evidence.py \
+            research/firmware/lj733_V27550.zip \
+            research/firmware/lj733b_V34574.zip \
+            --json-out /tmp/bg02-firmware-evidence.json
+
+      - name: Condensed evidence summary (no firmware bytes)
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path("/tmp/bg02-firmware-evidence.json").read_text())
+          print("STATUS: OFFLINE_TEXT_ANCHORS_ONLY")
+          print("Not a BG02 V35922 firmware audit. No readback support verified.")
+          for source in data["sources"]:
+              print("SOURCE", source["input"])
+              for entry in source["entries"]:
+                  for family, hits in entry["hits"].items():
+                      print("  MEMBER", entry["member"], "FAMILY", family,
+                            "ANCHORS", ",".join(sorted({h["anchor"] for h in hits})))
+                  if not entry["hits"]:
+                      print("  MEMBER", entry["member"], "ANCHORS NONE (INCONCLUSIVE)")
+                  if entry["packed_container_warning"]:
+                      print("  WARNING: PACKED_UFW_NOT_UNPACKED")
+              for note in source["notes"]:
+                  print("  NOTE", note)
+          PY
