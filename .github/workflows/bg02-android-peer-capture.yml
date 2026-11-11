@@ -1,0 +1,46 @@
+name: BG02 Android receiver capture build
+
+on:
+  push:
+    branches: [research/bg02-peer-share-readback]
+    paths:
+      - '.github/workflows/bg02-android-peer-capture.yml'
+      - 'tools/android-peer-receiver/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android 35 SDK
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug-signed standalone capture APK
+        working-directory: tools/android-peer-receiver
+        run: gradle :app:assembleDebug --no-daemon
+
+      - name: Verify debug APK exists
+        run: test -s tools/android-peer-receiver/app/build/outputs/apk/debug/app-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bg02-peer-capture-debug-apk
+          path: tools/android-peer-receiver/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
