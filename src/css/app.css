@@ -878,3 +878,6 @@ input[type='number'] {
 .crop-zoom-value { min-width: 3.5rem; font-family: var(--font-mono); font-size: 0.8rem; text-align: right; }
 .crop-controls button { padding: 0.4rem 0.7rem; }
 .crop-tip { grid-column: 1 / -1; text-align: center; margin: 0; }
+
+/* Hidden state must beat the preview's explicit display:block rules. */
+.dial img[hidden], .dial canvas[hidden] { display: none; }
