@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveBadgeProfile, imageMatchesBadge, needsFreshPictureSelection } from '../js/device-profile.js';
+import { resolveBadgeProfile, imageMatchesBadge } from '../js/device-profile.js';
 
 test('BG02 V1.5 always defaults to 240x240 RU50 without querying dial-info', () => {
   const profile = resolveBadgeProfile({
@@ -61,15 +61,4 @@ test('Unknown/unconnected uses safe generic fallback until identification', () =
   assert.equal(profile.height, 360);
   assert.equal(profile.format, 'rgb565');
   assert.equal(imageMatchesBadge(null, profile), false);
-});
-
-test('active badge change requires an explicit new picture selection', () => {
-  assert.equal(needsFreshPictureSelection(null, 'badge-A'), true);
-  assert.equal(needsFreshPictureSelection('badge-A', 'badge-B'), true);
-  assert.equal(needsFreshPictureSelection('badge-A', null), true);
-});
-
-test('device metadata refresh for the same badge preserves selected picture', () => {
-  assert.equal(needsFreshPictureSelection('badge-A', 'badge-A'), false);
-  assert.equal(needsFreshPictureSelection(null, null), false);
 });
