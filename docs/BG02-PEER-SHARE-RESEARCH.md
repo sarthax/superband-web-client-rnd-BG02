@@ -63,7 +63,12 @@ Our tested **FitPro Dial31** (`0x1F`) image upload still works, but should not b
 - `AE00` JieLi OTA, which is for firmware update;
 - an unknown AC707N **peer-to-peer image transport** (likely a distinct application state machine).
 
-In the official resource comparison, one 188 KB source GIF became 431 KB in a vendor GIF/UI-resource variant, 258 KB as AVI, or 252 KB as JPG frames. This is a *comparison for the vendor demo*, not a measured BG02 size or codec. Vendor notes say GIF requires app-side conversion to JieLi's supported GIF format, and AVI playback supports MJPEG video/PCM audio in its local-video demo.
+In the official resource comparison, a **188 KB input GIF** became **431 KB** as a converted JieLi UI GIF, **258 KB** as AVI (12 fps, 20 frames, quality level 3, no audio), and **252 KB** as JPG frames (same frame-rate/count). This was tested with vendor firmware **707v200patch02 + AVI patch** and is *not* a measured BG02 size/codec. It does support the owner's concern about limited space for animations.
+
+- Resource comparison: https://doc.zh-jieli.com/KDocs/master/手表穿戴技术应用文档入口汇总/707电子吧唧开发资料/AVI-GIF-JPG三种方案资源占用对比.html
+- APP SDK document: https://doc.zh-jieli.com/KDocs/master/手表穿戴技术应用文档入口汇总/707电子吧唧开发资料/707_SDK-APP接口相关.html
+
+The app-interface document identifies **JieLi_Health_SDK_Android_1.14.0_beta1+**, iOS **JieLi_Health_SDK_iOS_V1.12.0+** and vendor video-packing libraries; it says developers should request the materials from JieLi. These are **vendor SDK releases**, not confirmation of versions bundled in the current SuperBand APK. Vendor notes say GIF requires app-side conversion to JieLi's supported format, and AVI playback supports MJPEG video/PCM audio in its local-video demo.
 
 ## Specific code locations to inspect next (read-only)
 
