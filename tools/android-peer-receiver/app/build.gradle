@@ -1,0 +1,21 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'org.bg02.peercapture'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'org.bg02.peercapture'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '0.1-research'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
