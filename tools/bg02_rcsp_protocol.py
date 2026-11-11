@@ -10,8 +10,8 @@ MAGIC = b"\xfe\xdc\xba"
 END = 0xEF
 MAX_BODY = 4096
 KNOWN_OPCODES = {
-    0x02: "GET_TARGET_INFO",
-    0x03: "GET_TARGET_FEATURE",
+    0x02: "GET_TARGET_FEATURE_MAP",
+    0x03: "GET_TARGET_INFO",
     0x07: "SYS_INFO_GET",
     0x09: "SYS_INFO_AUTO_UPDATE",
     0x0C: "FILE_BROWSE_REQUEST_START",
@@ -19,9 +19,11 @@ KNOWN_OPCODES = {
     0x24: "ONE_FILE_TRANS_BACK",
 }
 
-# Observed on a related JieLi device: opcode 2, sn 1, feature mask FFFFFFFF.
-# Read-only target identity/capability request, not file browsing or OTA.
-TARGET_INFO_REQUEST = bytes.fromhex("fe dc ba c0 02 00 05 01 ff ff ff ff ef")
+# JieLi target-information opcode 0x03 is confirmed in several independent SDKs.
+# Request body: serial=1, mask=0xFFFFFFFF, platform=0 (6 bytes).
+# This fixture is for OFFLINE protocol validation only until BG02's auth is mapped.
+# Never send it as an unauthenticated hardware probe.
+TARGET_INFO_REQUEST = bytes.fromhex("fe dc ba c0 03 00 06 01 ff ff ff ff 00 ef")
 
 
 def parse_frame(frame: bytes) -> dict | None:
