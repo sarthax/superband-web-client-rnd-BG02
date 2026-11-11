@@ -58,3 +58,12 @@ export function imageMatchesBadge(prepared, profile, snapshot = {}) {
   }
   return true;
 }
+
+/**
+ * A photo chosen for one device must not silently become upload-ready on a
+ * different device. Firmware/profile refreshes within the same session do
+ * not trigger this reset, but connecting, switching or disconnecting does.
+ */
+export function needsFreshPictureSelection(previousSessionId, nextSessionId) {
+  return (previousSessionId ?? null) !== (nextSessionId ?? null);
+}
