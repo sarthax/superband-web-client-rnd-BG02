@@ -2,6 +2,12 @@
 
 Status: **RESEARCH ONLY**. No BLE writes, firmware flashing, source changes to the working JPG/PNG → RU50 uploader, or claim of a verified BG02 readback API.
 
+## Second Android bugreport: attempted badge-to-badge modes (2026-11-11)
+
+The user's second Android full bugreport includes all **4,612** previous HCI packets as a **byte-for-byte prefix**, followed by **4,527 new** packets (to 9,139). There are **462 additional** BLE advertising reports. The new period captures repeated Android-phone reconnections to BG02; the final connection used **39 writes to FitPro UART 7E400002** and **35 notifications on 7E400003**, but **no new 0x1F image data, AE01 RCSP commands, AE02 subscriptions, or visible `wallpaper_adv`/new BG02-named advertisement**. Several phone connections failed with reported GATT statuses 8, 147 and 133.
+
+The user was trying the badge's Send/Receive UI, but **the phone's HCI log cannot capture an independent badge-to-badge GATT exchange**. Therefore this does **not** establish failure or success of the peer transfer. The existing scanner or external over-the-air sniffer remains the right next evidence source; repeated RCSP queries will not help. See the [sanitized delta report](BG02-ANDROID-HCI-PEER-MODE-2026-11-11.md).
+
 ## Android full bug report — actual HCI traffic (2026-11-11)
 
 The owner's Android 16 bug report contains a valid HCI snoop log (**4,612 records**, **1,055,441 bytes**) and SuperBand app logs. It shows BG02 discovered and connected, then a **successful SuperBand JPEG upload from phone to badge** on **7E400002/003**, with `0x1F` upload packets and `0x20` status acknowledgments **1000–1002**. There were **no AE01 writes or AE02 notification subscriptions** in this phone session and no observed peer-sharing transfer. This is not contradictory to the separately authenticated Windows probe.
