@@ -113,6 +113,16 @@ https://github.com/Jieli-Tech/Android-JL_Bluetooth/blob/main/code/PiHome_V1.13.0
 2. **Source-only peer fallback:** obtain the 200patch02+ peer-sharing module, find BLE advertising and receiver contract. Only if the standard file-read path is absent, build a safe, isolated receiver.
 3. **Hardware gate only after code proof:** connect, enumerate volumes (no deletions or OTA), and try retrieving one known harmless user image. Distinguish GATT reads from a true file-transfer protocol.
 
+## BG02 V35922 hardware result — passive AE02 observer (2026-11-10)
+
+The owner ran `tools/bg02_rcsp_observe.py --device BG02 --seconds 20` twice under Windows/Bleak (using `uv run --native-tls --with bleak`), navigating both **Send** and **Receive** modes.
+
+**Observed:** Both connections and `AE02` notification subscriptions succeeded. **Zero notification fragments** were logged in both 20-second runs. No transfer started; no image was retrieved. Both commands pointed to the same JSONL path, so the second run overwrote the first (both independently printed 0 notifications).
+
+**Precise interpretation:** No **unsolicited** `AE02` traffic was emitted to this connected central during those windows. This does **not** prove the stock BG02 lacks RCSP or file readback: RCSP typically emits responses after correctly framed, possibly authenticated, commands; the passive observer sends none. Further, connecting as a BLE central does **not** passively sniff another link's packets, and the active PC connection may preclude the badge from acting as the peer-sharing central/receiver. Do not use this negative result to rule out the `wallpaper_sharing_main.c` path.
+
+**Action:** **Do not repeat passive AE02 or BLE scans**. Retire the passive observer as a useful capability probe. The next defensible work is source analysis to establish (a) whether V35922 routes non-OTA RCSP through `AE00` and exposes any filesystem, or (b) the receiver's precise advertising and GATT contract from the JieLi peer-sharing source. Only implement a bounded, **explicit** active read-only query after firmware/source evidence defines its frame, authentication and expected response. Do not guess `0x0C`/`0x24` writes or touch OTA/raw-flash endpoints.
+
 ## Concrete RCSP GATT and file-reading path (2026-11-10)
 
 ### Why AE00 warrants investigation
