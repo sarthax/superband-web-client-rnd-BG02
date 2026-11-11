@@ -67,5 +67,77 @@ class RcspFramingTests(unittest.TestCase):
             self.assertEqual(inspect(path), 0)
 
 
+class FakeGattCharacteristic:
+    def __init__(self):
+        self.properties = ["write-without-response"]
+
+
+class FakeGattService:
+    uuid = "0000ae00-0000-1000-8000-00805f9b34fb"
+
+    def get_characteristic(self, uuid):
+        return FakeGattCharacteristic() if uuid == "0000ae01-0000-1000-8000-00805f9b34fb" else None
+
+
+class FakeServices:
+    def __iter__(self):
+        return iter([FakeGattService()])
+
+    def get_service(self, uuid):
+        return FakeGattService() if uuid == FakeGattService.uuid else None
+
+
+class FakeBleakClient:
+    last = None
+
+    def __init__(self, device, timeout=20.0):
+        self.services = FakeServices()
+        self.writes = []
+        self.subscriptions = []
+        FakeBleakClient.last = self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return None
+
+    async def start_notify(self, characteristic, callback):
+        self.subscriptions.append(characteristic)
+
+    async def write_gatt_char(self, characteristic, data, response=False):
+        self.writes.append((characteristic, bytes(data), response))
+
+
+class ActiveReadOnlyGateTests(unittest.IsolatedAsyncioTestCase):
+    async def run_observation(self, probe):
+        import types
+        from unittest.mock import AsyncMock, patch
+        import bg02_rcsp_observe as observer
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "out.jsonl"
+            fake_bleak = types.SimpleNamespace(BleakClient=FakeBleakClient)
+            with patch.dict(sys.modules, {"bleak": fake_bleak}), \
+                 patch.object(observer, "locate", AsyncMock(return_value=types.SimpleNamespace(name="BG02"))):
+                result = await observer.observe("BG02", 0.001, path, False, probe)
+            return result, list(FakeBleakClient.last.writes), list(FakeBleakClient.last.subscriptions)
+
+    async def test_default_mode_never_writes_application_commands(self):
+        result, writes, subscriptions = await self.run_observation(False)
+        self.assertEqual(result, 0)
+        self.assertEqual(writes, [])
+        self.assertEqual(subscriptions, ["0000ae02-0000-1000-8000-00805f9b34fb"])
+
+    async def test_active_mode_sends_exactly_one_identity_request(self):
+        result, writes, subscriptions = await self.run_observation(True)
+        self.assertEqual(result, 0)
+        self.assertEqual(len(writes), 1)
+        self.assertEqual(writes[0][1], TARGET_INFO_REQUEST)
+        self.assertFalse(writes[0][2])
+        self.assertEqual(len(subscriptions), 1)
+
+
+
+
 if __name__ == "__main__":
     unittest.main()
