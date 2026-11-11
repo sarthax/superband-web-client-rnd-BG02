@@ -360,80 +360,94 @@ async function connect(acceptAll) {
 }
 
 async function rebuildPreview() {
+  const token = ++previewGeneration;
   const file = $('#imageInput').files?.[0];
+  prepared = null;
+  updatePushChecklist();
+  hideCropper();
   if (!file) {
-    prepared = null;
+    cropper.clear();
+    $('#dialPreview').hidden = true;
+    $('#dialPlaceholder').hidden = false;
+    $('#dialPlaceholder').textContent = 'Choose a picture';
     $('#imageMeta').textContent = 'No image selected.';
-    updatePushChecklist();
     return;
   }
 
-  // Validate the currently selected file against the *active* badge. The
-  // HTML accept filter is advisory; drag/drop and prior selections bypass it.
   const snap = client.getSnapshot();
   const profile = resolveBadgeProfile(snap);
-  prepared = null;
-  updatePushChecklist();
+  const isRu50 = file.name.toLowerCase().endsWith('.ru50');
+  const isPicture = file.type.startsWith('image/') ||
+    /\.(png|jpg|jpeg|webp|gif|bmp)$/i.test(file.name);
+
   try {
-    const isRu50 = file.name.toLowerCase().endsWith('.ru50');
-    if (profile.bg02 && !isRu50) {
-      $('#dialPreview').hidden = true;
-      $('#dialPlaceholder').hidden = false;
-      $('#dialPlaceholder').textContent = 'Convert to RU50 first';
-      $('#imageMeta').textContent =
-        `${file.name} is not a BG02 RU50 image. JPEG/PNG → RGB565 displays black on this badge; use the offline RU50 encoder.`;
-      log({ msg: 'BG02: rejected JPG/PNG to prevent incorrect RGB565 upload; use an encoded .ru50 file.', level: 'warn' });
-      return;
+    if (isRu50 && !profile.bg02) {
+      throw new Error('RU50 is only supported for BG02/LJ733 badges');
     }
-    if (!profile.bg02 && isRu50) {
-      throw new Error('RU50 is only supported for a confirmed BG02/LJ733 device');
+    if (!isRu50 && !isPicture) {
+      throw new Error('Choose a JPG, PNG, WebP or RU50 image');
     }
     let next;
     if (isRu50) {
-      // Import an actual pre-encoded ETC2 texture; do not repack as RGB565.
       const bytes = new Uint8Array(await file.arrayBuffer());
-      const meta = inspectRu50(bytes);
+      const info = inspectRu50(bytes);
       next = {
-        blob: file, bytes, width: meta.width, height: meta.height,
-        format: 'ru50', previewUrl: null,
+        blob:file, bytes, width:info.width, height:info.height,
+        format:'ru50', source:'encoded',
       };
-      $('#dialPreview').hidden = true;
-      $('#dialPlaceholder').hidden = false;
-      $('#dialPlaceholder').textContent = 'RU50 / ETC2 ready';
-      $('#imageMeta').textContent =
-        `${file.name} → ${meta.width}×${meta.height} RU50/ETC2 · ${formatBytes(bytes.length)}`;
+    } else if (profile.bg02) {
+      const image = await loadImage(file);
+      next = {
+        bytes:null, width:240, height:240,
+        format:'ru50', source:'crop', name:file.name,
+      };
+      // Do not create a crop for an obsolete badge or image selection.
+      if(token === previewGeneration &&
+         snap.sessionId === client.getSnapshot().sessionId) {
+        cropper.setImage(image);
+        showCropper();
+      }
     } else {
       next = await prepareFileForBadge(file, {
-        width: Number($('#dialW').value) || profile.width,
-        height: Number($('#dialH').value) || profile.height,
-        quality: 0.5,
-        round: $('#roundMask').checked,
-        format: profile.format,
+        width:Number($('#dialW').value)||profile.width,
+        height:Number($('#dialH').value)||profile.height,
+        quality:0.5,
+        round:$('#roundMask').checked,
+        format:profile.format,
       });
-      const img = $('#dialPreview');
-      img.src = next.previewUrl;
-      img.hidden = false;
+    }
+
+    const now = client.getSnapshot();
+    if(token !== previewGeneration || snap.sessionId !== now.sessionId ||
+       resolveBadgeProfile(now).format !== next.format) return;
+
+    prepared = next;
+    if (isRu50) {
+      $('#dialPreview').hidden = true;
+      $('#dialPlaceholder').hidden = false;
+      $('#dialPlaceholder').textContent = 'Encoded RU50 image ready';
+      $('#imageMeta').textContent =
+        `${file.name} → 240×240 RU50/ETC2 · ${formatBytes(next.bytes.length)}`;
+    } else if (profile.bg02) {
+      $('#imageMeta').textContent =
+        `${file.name} → round 240×240 crop · converted automatically when uploaded`;
+    } else {
+      $('#dialPreview').src = next.previewUrl;
+      $('#dialPreview').hidden = false;
       $('#dialPlaceholder').hidden = true;
-      $('#dial').classList.toggle('round', $('#roundMask').checked);
+      $('#dial').classList.toggle('round',$('#roundMask').checked);
       const fmtLabel = next.format === 'jpeg444' ? 'JPEG 4:4:4' : 'RGB565';
       $('#imageMeta').textContent =
         `${file.name} → ${next.width}×${next.height} ${fmtLabel} · ${formatBytes(next.bytes.length)}`;
     }
-    // A slower image conversion must not apply after a badge switch.
-    const now = client.getSnapshot();
-    const current = resolveBadgeProfile(now);
-    if (snap.sessionId !== now.sessionId || current.format !== next.format) {
-      prepared = null;
-      $('#imageMeta').textContent = 'Badge changed while preparing image. Select the image again.';
-    } else {
-      prepared = next;
-      if (isRu50) log({ msg: `BG02 RU50 validated: ${next.bytes.length} bytes` });
-    }
-  } catch (e) {
-    prepared = null;
-    $('#imageMeta').textContent = `Unable to prepare image: ${e.message}`;
-    toast(e.message, 'err');
-    log({ msg: e.message, level: 'err' });
+  } catch(e) {
+    if(token !== previewGeneration)return;
+    cropper.clear();
+    hideCropper();
+    prepared=null;
+    $('#imageMeta').textContent = `Unable to prepare picture: ${e.message}`;
+    toast(e.message,'err');
+    log({msg:e.message,level:'err'});
   } finally {
     updatePushChecklist();
   }
