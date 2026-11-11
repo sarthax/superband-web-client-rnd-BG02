@@ -134,26 +134,26 @@ The [ElectronicCats DG01-specific client](https://github.com/ElectronicCats/jiel
 
 ```powershell
 # Download the pinned MIT-licensed library source, without ANY submodules.
-cd D:\\Claude\\scratch
+cd D:\Claude\scratch
 git clone --filter=blob:none --sparse --no-recurse-submodules https://github.com/ElectronicCats/jieli-ble-badge-research.git jieli-badge-src
-cd .\\jieli-badge-src
+cd .\jieli-badge-src
 git checkout 1802a8860d87f02c4c8562721f49ee85f1031dce
 git sparse-checkout set tools/qix-ble
 
 # From your local research branch checkout.
-cd D:\\Claude\\superband-bg02-research
+cd D:\Claude\superband-bg02-research
 git fetch origin
 git switch research/bg02-peer-share-readback
 git pull --ff-only
 uv venv --python 3.12 .venv-bg02
-uv pip install --native-tls --python ".\\.venv-bg02\\Scripts\\python.exe" bleak "D:\\Claude\\scratch\\jieli-badge-src\\tools\\qix-ble"
+uv pip install --native-tls --python ".\.venv-bg02\Scripts\python.exe" bleak "D:\Claude\scratch\jieli-badge-src\tools\qix-ble"
 
 # Verify imports and perform NO BLE connection.
-& .\\.venv-bg02\\Scripts\\python.exe -c "from bleak import BleakClient; from qix_ble.auth import AuthSession; from qix_ble.sysinfo import get_target_info; print('Dependencies OK')"
-& .\\.venv-bg02\\Scripts\\python.exe .\\tools\\bg02_ae00_auth_probe.py
+& .\.venv-bg02\Scripts\python.exe -c "from bleak import BleakClient; from qix_ble.auth import AuthSession; from qix_ble.sysinfo import get_target_info; print('Dependencies OK')"
+& .\.venv-bg02\Scripts\python.exe .\tools\bg02_ae00_auth_probe.py
 
 # After closing SuperBand and the browser manager, one opt-in hardware test:
-& .\\.venv-bg02\\Scripts\\python.exe .\\tools\\bg02_ae00_auth_probe.py --connect
+& .\.venv-bg02\Scripts\python.exe .\tools\bg02_ae00_auth_probe.py --connect
 ```
 
 If the `jieli-badge-src` destination already exists from a partial attempt, inspect it or remove just that unused clone before restarting; do not overwrite unrelated directories. This sequence keeps the pinned source version while avoiding `uv`'s recursive Git submodule initialization. `git config core.longpaths true` alone is not the preferred fix because the huge SDK checkout is unnecessary.
