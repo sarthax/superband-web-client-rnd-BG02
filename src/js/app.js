@@ -1,6 +1,7 @@
 import { SuperBandClient, FileType, FunctionType } from './client.js';
-import { prepareFileForBadge, formatBytes, DEFAULT_DIAL } from './image.js';
-import { inspectRu50, looksLikeBg02 } from './ru50.js';
+import { prepareFileForBadge, loadImage, formatBytes, DEFAULT_DIAL } from './image.js';
+import { inspectRu50, encodeImageDataRu50, looksLikeBg02 } from './ru50.js';
+import { CircleCropEditor } from './circle-crop.js';
 import { REPO_URL } from './protocol.js';
 import { resolveBadgeProfile, imageMatchesBadge } from './device-profile.js';
 import { bindAdvanced } from './advanced.js';
@@ -12,6 +13,26 @@ const client = new SuperBandClient();
 let prepared = null;
 let transferring = false;
 let activeProfileKey = null;
+let previewGeneration = 0;
+const cropper = new CircleCropEditor({
+  canvas: $('#cropCanvas'),
+  zoomInput: $('#cropZoom'),
+  resetButton: $('#cropReset'),
+  onChange: ({zoom}) => { $('#cropZoomValue').textContent = zoom + '%'; },
+});
+function showCropper() {
+  $('#dialPreview').hidden = true;
+  $('#dialPlaceholder').hidden = true;
+  $('#cropCanvas').hidden = false;
+  $('#cropControls').hidden = false;
+  $('#dial').classList.add('crop-active','round');
+}
+function hideCropper() {
+  $('#cropCanvas').hidden = true;
+  $('#cropControls').hidden = true;
+  $('#dial').classList.remove('crop-active');
+}
+
 
 function setPill(el, text, state = '') {
   el.textContent = text;
@@ -157,7 +178,10 @@ function applyBadgeProfile(snapshot = client.getSnapshot()) {
   const changed = key !== activeProfileKey;
   if (changed) {
     activeProfileKey = key;
+    previewGeneration++;
     prepared = null;
+    cropper.clear();
+    hideCropper();
     $('#dialW').value = String(profile.width);
     $('#dialH').value = String(profile.height);
   }
@@ -175,7 +199,7 @@ function applyBadgeProfile(snapshot = client.getSnapshot()) {
   $('#allocMediaOption').hidden = !profile.showBajiOptions;
   $('#roundMaskOption').hidden = profile.bg02;
   $('#btnPushAll').hidden = profile.bg02 || client.sessionCount < 2;
-  $('#btnPush').textContent = profile.bg02 ? 'Upload RU50' : 'Upload to badge';
+  $('#btnPush').textContent = profile.bg02 ? 'Upload picture' : 'Upload to badge';
   $('#otaPreset').disabled = profile.bg02;
   $('#btnOtaPrepare').disabled = profile.bg02;
   $('#otaCatVersion').disabled = profile.bg02;
