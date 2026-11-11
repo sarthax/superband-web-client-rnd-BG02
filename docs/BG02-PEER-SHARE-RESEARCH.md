@@ -2,6 +2,18 @@
 
 Status: **RESEARCH ONLY**. No BLE writes, firmware flashing, source changes to the working JPG/PNG → RU50 uploader, or claim of a verified BG02 readback API.
 
+## Android phone as a capture-only peer receiver (2026-11-11)
+
+**Goal:** get **receiver-side BLE connection evidence using one BG02 plus the owner's Android phone**, instead of another phone HCI bugreport or an unauthenticated RCSP command.
+
+JieLi's [707N peer transfer demo](https://doc.zh-jieli.com/KDocs/master/手表穿戴技术应用文档入口汇总/707电子吧唧开发资料/707N蓝牙互传图传demo/) identifies the receiver by a configured advertisement name; the demo screenshots use `wallpaper_adv`. The **BG02 V35922 advertisement filter/receiver GATT is still unknown**, and the 200patch04 source archive linked from the GitLab README redirects to a WPS/KDocs sign-in, so source availability isn't solved by the public vanilla SDK.
+
+Implemented a standalone [Android diagnostic application](../tools/android-peer-receiver/README.md) in `tools/android-peer-receiver` (Java, no third-party runtime libraries). It **advertises a user-selectable name (default `wallpaper_adv`)**, creates one **nonvendor custom test GATT service** and logs incoming link states, MTUs, and GATT requests. It **never emits JieLi/RCSP/OTA/FitPro commands and discards raw written bytes**. Copyable results have ephemeral pseudonyms instead of device addresses. The app restores the phone's Bluetooth name on Stop and enforces an automatic 120-second stop; if Android terminates it, manually restore the Bluetooth name in Settings.
+
+Use only if the Android handset supports **BLE peripheral advertising** and the app is in the foreground. The Android debug APK is built on the research branch by [BG02 Android receiver capture build](https://github.com/sarthax/superband-web-client-rnd-BG02/actions/workflows/bg02-android-peer-capture.yml). **Do not claim a validated APK until its CI job succeeds.** The app is **not** a picture downloader. A BG02 connection would validate name/initiator compatibility only. A silent run is inconclusive.
+
+**One experiment:** disconnect SuperBand and Windows/browser BLE, install the debug APK, open it, press Start, enter **Send Picture on BG02**, and select the phone if listed; stop and copy the sanitized summary. Do not request more Android snoop bugreports for independent badge-to-badge exchanges. Do not merge the working uploader PR #3 as part of this research.
+
 ## Second Android bugreport: attempted badge-to-badge modes (2026-11-11)
 
 The user's second Android full bugreport includes all **4,612** previous HCI packets as a **byte-for-byte prefix**, followed by **4,527 new** packets (to 9,139). There are **462 additional** BLE advertising reports. The new period captures repeated Android-phone reconnections to BG02; the final connection used **39 writes to FitPro UART 7E400002** and **35 notifications on 7E400003**, but **no new 0x1F image data, AE01 RCSP commands, AE02 subscriptions, or visible `wallpaper_adv`/new BG02-named advertisement**. Several phone connections failed with reported GATT statuses 8, 147 and 133.
