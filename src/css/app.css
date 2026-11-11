@@ -880,4 +880,4 @@ input[type='number'] {
 .crop-tip { grid-column: 1 / -1; text-align: center; margin: 0; }
 
 /* Hidden state must beat the preview's explicit display:block rules. */
-.dial img[hidden], .dial canvas[hidden] { display: none; }
+.dial img[hidden], .dial canvas[hidden], .dial .placeholder[hidden] { display: none; }
