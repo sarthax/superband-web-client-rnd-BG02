@@ -1,0 +1,23 @@
+name: BG02 passive receiver advertisement checks
+
+on:
+  push:
+    branches: [research/bg02-peer-share-readback]
+    paths:
+      - '.github/workflows/bg02-peer-adv-tests.yml'
+      - 'tools/bg02_peer_advertisements.py'
+      - 'tools/tests/test_bg02_peer_advertisements.py'
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run five privacy and phase comparison checks (no Bluetooth)
+        run: python3 -m unittest discover -s tools/tests -p 'test_bg02_peer_advertisements.py' -v
+      - name: Assert diagnostic CLI available without Bleak
+        run: python3 tools/bg02_peer_advertisements.py --help > /dev/null
