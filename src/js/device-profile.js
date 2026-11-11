@@ -32,13 +32,13 @@ export function resolveBadgeProfile(snapshot = {}) {
     hasReportedSize: reportedWidth !== null && reportedHeight !== null,
     showMediaLibrary: protocolMode === 'baji',
     showBajiOptions: protocolMode === 'baji',
-    fileAccept: bg02 ? '.ru50' : 'image/*',
-    chooseLabel: bg02 ? 'Choose RU50 image' : 'Choose image',
+    fileAccept: bg02 ? 'image/*,.ru50' : 'image/*',
+    chooseLabel: bg02 ? 'Choose photo' : 'Choose image',
     formatLabel: bg02
-      ? 'BG02 · 240×240 · RU50 / ETC2'
+      ? 'BG02 · 240×240 · automatic RU50/ETC2'
       : jpeg ? 'JPEG 4:4:4' : 'RGB565',
     formatHelp: bg02
-      ? 'BG02 (LJ733): import a pre-encoded 240×240 .ru50 image. PNG/JPG are not automatically converted by this build; use the offline encoder described in docs/BG02-RU50-EXPERIMENT.md.'
+      ? 'Choose a JPG, PNG or WebP photo, drag to position it inside the round badge, adjust zoom, then upload. The image is cropped to 240×240 and converted to RU50/ETC2 automatically. Pre-encoded .ru50 files are also accepted.'
       : jpeg
         ? 'Images are cropped to the selected size and encoded as JPEG 4:4:4 before uploading.'
         : 'Images are cropped to the selected size and encoded as RGB565. For badges without reported dimensions, 360×360 is only a fallback.',
