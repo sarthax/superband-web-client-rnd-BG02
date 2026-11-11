@@ -9,7 +9,7 @@ The owner reports on **BG02, hardware LJ733_MB_V1.5, firmware V35922**:
 - Browser crop/zoom → RU50/ETC2 still images transfer and render correctly.
 - Official SuperBand app sends a short animated GIF that plays on the badge.
 - On-badge **Share Picture** / **Receive Picture** modes scan nearby Bluetooth addresses. Selecting an unrelated nearby device says to put the other device into the opposite mode; the transaction does not begin.
-- Windows Bleak scan locates BG02; GATT services include **7E40** UART (002 write, 003 notify, 004 read/write/notify), **3802 / 4A02** read/write/notify, **AA00 / AA01 / AA02** write/notify, **AE00** (JieLi OTA), and standard services.
+- Windows Bleak scan locates BG02; GATT services include **7E40** UART (002 write, 003 notify, 004 read/write/notify), **3802 / 4A02** read/write/notify, **AA00 / AA01 / AA02** write/notify, **AE00** (candidate JieLi RCSP transport, also used in firmware-update workflows), and standard services.
 - A separate Baji-only media list in our manager was intentionally hidden for FitPro/BG02; no BG02 list/readback command has been demonstrated.
 
 This suggests peer-discovery plus a receiver-specific handshake, **not** a second MAC address or service necessarily. It does not establish the on-air file container, which side hosts the GATT server, or whether a phone can pull back stored files.
@@ -60,7 +60,7 @@ Vendor docs state that **phone → device** wallpaper delivery uses JieLi **RCSP
 
 Our tested **FitPro Dial31** (`0x1F`) image upload still works, but should not be conflated with:
 - Baji Media List/Preview/Background requests, which are **not** established on BG02 and may disconnect a FitPro badge;
-- `AE00` JieLi OTA, which is for firmware update;
+- `AE00` JieLi **RCSP** service in official SDKs (which also transports OTA operations); its presence alone does not establish BG02 file browsing;
 - an unknown AC707N **peer-to-peer image transport** (likely a distinct application state machine).
 
 In the official resource comparison, a **188 KB input GIF** became **431 KB** as a converted JieLi UI GIF, **258 KB** as AVI (12 fps, 20 frames, quality level 3, no audio), and **252 KB** as JPG frames (same frame-rate/count). This was tested with vendor firmware **707v200patch02 + AVI patch** and is *not* a measured BG02 size/codec. It does support the owner's concern about limited space for animations.
@@ -112,6 +112,67 @@ https://github.com/Jieli-Tech/Android-JL_Bluetooth/blob/main/code/PiHome_V1.13.0
 1. **Source-only check:** identify the RCSP `ReadFileParam` format, capability gate, and device-side counterpart. Check whether a **BG02-compatible** firmware / SuperBand implementation advertises RCSP file browsing or wallpaper readback. If yes, this would be a direct native **Download from Badge** path; pursue this first.
 2. **Source-only peer fallback:** obtain the 200patch02+ peer-sharing module, find BLE advertising and receiver contract. Only if the standard file-read path is absent, build a safe, isolated receiver.
 3. **Hardware gate only after code proof:** connect, enumerate volumes (no deletions or OTA), and try retrieving one known harmless user image. Distinguish GATT reads from a true file-transfer protocol.
+
+## Concrete RCSP GATT and file-reading path (2026-11-10)
+
+### Why AE00 warrants investigation
+
+A direct reading of vendor BLE RCSP documentation identifies **AE00** as the RCSP service with **AE01** for writes and **AE02** for notifications. The same page describes **3802/4A02** as an Alipay profile when the Alipay feature is enabled. These descriptions are from a *different JieLi SDK/chip family*, not the exact BG02 V35922 GATT implementation, but they match the characteristic properties supplied by the owner.
+
+Sources:
+- https://doc.zh-jieli.com/SDKWiki/master/Jieli-Tech/fw-AC79_AIoT_SDK/4-bluetooth/4.4-bt-extensions.html
+- https://doc.zh-jieli.com/SDKWiki/master/Jieli-Tech/fw-AC63_BT_SDK/9-third-party-integrations/9.1-jl-rcsp.html
+
+The latter SDK documents an RCSP framing pattern **FE DC BA ... EF**, an authorization phase, and these *standard RCSP* opcodes:
+
+| RCSP opcode | Vendor symbol | Function in SDK | BG02 support |
+|---|---|---|---|
+| 0x02 | JL_OPCODE_GET_TARGET_FEATURE_MAP | Query feature map | Unknown |
+| 0x03 | JL_OPCODE_GET_TARGET_FEATURE | Query target features | Unknown |
+| 0x07 | JL_OPCODE_SYS_INFO_GET | Read system information | Unknown |
+| 0x0C | JL_OPCODE_FILE_BROWSE_REQUEST_START | Start browsing a directory | Unknown |
+| 0x0D | JL_OPCODE_FILE_BROWSE_REQUEST_STOP | Stop browsing | Unknown |
+| 0x24 | JL_OPCODE_ONE_FILE_TRANS_BACK | Transfer one file back | Unknown |
+
+**These are opcode references for *other JieLi firmware implementations*, not wire packets tested on BG02.** Valid RCSP requires correct framing, authentication, device support, and real file handles/names. Do not directly transmit single-byte opcodes to AE01, or auto-test 0x0C/0x24. The OTA feature may coexist on AE00; malformed writes could trigger undesired device behavior.
+
+### Direct readback has a public sample implementation
+
+The official JieLi Android Health demo has:
+- \`FileBrowseManager.getOnlineDev()\` for enumerating online storage.
+- \`FileManagerDemo\` with \`GetFileByClusterTask.Param(devHandle, 0, cluster, localOutputPath)\`.
+- \`GetFileByNameTask.Param(devHandle, name, localOutputPath, unicode)\`.
+- \`WatchTestTool\` source \`ReadFileByNameTask.java\` and \`ReadFileByClusterTask.java\` showing progress, cancellation, and saving to phone paths.
+
+Vendor code:
+- https://github.com/Jieli-Tech/Android-JL_Health/blob/main/code/app/HealthAide_V1.1.0_SDK_V1.14.0/app/src/test/java/com/jieli/healthaide/demos/FileManagerDemo.java
+- https://github.com/Jieli-Tech/Android-JL_Health/blob/main/code/tool/WatchTestTool_V0.9.0_SDK_V1.14.0/app/src/main/java/com/jieli/watchtesttool/tool/test/filetask/ReadFileByNameTask.java
+- https://github.com/Jieli-Tech/Android-JL_Health/blob/main/code/tool/WatchTestTool_V0.9.0_SDK_V1.14.0/app/src/main/java/com/jieli/watchtesttool/tool/test/filetask/ReadFileByClusterTask.java
+
+This is stronger than inference from \`IFileOp\` alone; it is a working *SDK sample flow* on supported JieLi devices. **However, those sample files target general flash/SD storage and do not show BG02 V35922 or its wallpaper files being exposed.** Also, JieLi's RCSP authentication may prevent usable responses even if AE00 is present.
+
+### Implemented: passive BG02 AE02 observation tool
+
+\`tools/bg02_rcsp_observe.py\` is a standalone Bleak utility which **subscribes** to AE02 notifications for a single short window. Optional \`--also-uart\` subscribes to the existing FitPro UART notification characteristic. It sends **no RCSP, file-management, FitPro, or OTA command**. As with any BLE notification subscription, it does enable the standard GATT CCCD descriptor. Connection and notification subscription might change peer-sharing behavior; this is not a transparent over-the-air sniffer.
+
+\`\`\`powershell
+# From the BG02 project root; disconnect SuperBand and the browser manager first.
+uv run --with bleak python tools/bg02_rcsp_observe.py --device BG02 --seconds 20 --output "D:\Claude\scratch\bg02_rcsp_observe.jsonl"
+
+# Offline analysis after the observation:
+py -3 tools/bg02_rcsp_observe.py --inspect "D:\Claude\scratch\bg02_rcsp_observe.jsonl"
+\`\`\`
+
+The JSONL records only relative times, the notification characteristic and the raw payload hex; it intentionally omits MAC addresses, serial and model metadata. Payloads can nonetheless contain private data: **do not commit or publish unreviewed output**. This tool has **not** been run against the user's BG02.
+
+**Interpretation:** An \`FE DC BA\` magic prefix on AE02 would be evidence *consistent with* JieLi RCSP traffic. No notifications, or no visible prefix, would **not** prove absence of the protocol, especially if the badge expects authentication or a query before replying. The tool does **not** establish a file library or download function.
+
+### Implementation gate
+
+1. Determine whether BG02's AE00 channel provides **non-OTA RCSP** and authenticates to a compatible host. Do not send guessed commands.
+2. Establish whether the accessible RCSP file browser includes the **wallpaper storage** (not just general removable music storage).
+3. Only then implement listing and \`GetFileByNameTask\`/\`GetFileByClusterTask\`-equivalent download.
+4. If unavailable, return to the peer-sharing receiver implementation.
 
 ## Specific code locations to inspect next (read-only)
 
