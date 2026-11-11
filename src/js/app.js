@@ -40,6 +40,13 @@ function setPill(el, text, state = '') {
   else delete el.dataset.state;
 }
 
+function setUploadStatus(message, state = '') {
+  const el = $('#pushStatus');
+  el.textContent = message;
+  if (state) el.dataset.state = state;
+  else delete el.dataset.state;
+}
+
 function syncConnectionChrome() {
   const n = client.sessionCount;
   const on = n > 0 && client.connected;
@@ -223,6 +230,9 @@ function applyBadgeProfile(snapshot = client.getSnapshot()) {
       $('#dialPlaceholder').hidden = false;
       $('#dialPlaceholder').textContent = 'Choose an image to preview';
       $('#imageMeta').textContent = 'No image selected.';
+      setUploadStatus(client.connected
+        ? 'Choose a picture to upload to this badge.'
+        : 'Connect a badge, then choose a picture.');
     }
   }
   updatePushChecklist();
@@ -372,6 +382,7 @@ async function rebuildPreview() {
   prepared = null;
   updatePushChecklist();
   hideCropper();
+  setUploadStatus(file ? 'Preparing picture preview…' : 'Choose a picture to get started.');
   if (!file) {
     cropper.clear();
     $('#dialPreview').hidden = true;
@@ -429,6 +440,9 @@ async function rebuildPreview() {
        resolveBadgeProfile(now).format !== next.format) return;
 
     prepared = next;
+    setUploadStatus(profile.bg02
+      ? 'Picture ready. Adjust the crop if needed, then select Upload picture.'
+      : 'Picture ready. Select Upload to badge.', 'ok');
     if (isRu50) {
       $('#dialPreview').hidden = true;
       $('#dialPlaceholder').hidden = false;
@@ -453,6 +467,7 @@ async function rebuildPreview() {
     hideCropper();
     prepared=null;
     $('#imageMeta').textContent = `Unable to prepare picture: ${e.message}`;
+    setUploadStatus(`Picture could not be prepared: ${e.message}`, 'err');
     toast(e.message,'err');
     log({msg:e.message,level:'err'});
   } finally {
@@ -463,16 +478,19 @@ async function rebuildPreview() {
 async function pushImage() {
   if (!client.connected) {
     toast('Connect a badge first', 'err');
+    setUploadStatus('Connect a badge first.', 'err');
     return;
   }
   if (!prepared) {
     toast('Choose an image first', 'err');
+    setUploadStatus('Choose a picture first.', 'err');
     return;
   }
   if (prepared.format === 'ru50') {
     const snap = client.getSnapshot();
     if (snap.protocolMode !== 'fitpro' || !looksLikeBg02(snap)) {
-      toast('RU50 experiment requires a confirmed BG02/LJ733 FitPro badge', 'err');
+      toast('RU50 requires a confirmed BG02/LJ733 FitPro badge', 'err');
+      setUploadStatus('This picture format does not match the connected badge.', 'err');
       return;
     }
     log({ msg: 'BG02 RU50/ETC2 image transfer', level: 'info' });
@@ -480,18 +498,22 @@ async function pushImage() {
   const activeSnapshot = client.getSnapshot();
   if (!imageMatchesBadge(prepared, resolveBadgeProfile(activeSnapshot), activeSnapshot)) {
     toast('Image format does not match this badge. Select a compatible image.', 'err');
+    setUploadStatus('This picture belongs to a different badge. Choose it again.', 'err');
     return;
   }
   const bar = $('#pushBar');
   const wrap = $('#pushProgress');
   wrap.hidden = false;
   bar.style.width = '0%';
+  wrap.setAttribute('aria-valuenow', '0');
+  setUploadStatus('Preparing your picture for transfer…', 'busy');
   transferring = true;
   updatePushChecklist();
   try {
     let uploadBytes = prepared.bytes;
     if (prepared.source === 'crop') {
       log({ msg: 'Cropping and converting the picture for BG02…', level:'info' });
+      setUploadStatus('Converting your picture for BG02…', 'busy');
       uploadBytes = await encodeImageDataRu50(cropper.getImageData(240));
       const snapshot = client.getSnapshot();
       if (!client.connected || snapshot.sessionId !== activeSnapshot.sessionId ||
@@ -507,10 +529,16 @@ async function pushImage() {
       functionType,
       allocateId: $('#allocMedia').checked,
       onProgress: (pct) => {
-        bar.style.width = `${pct}%`;
+        const percent = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+        bar.style.width = `${percent}%`;
+        wrap.setAttribute('aria-valuenow', String(percent));
+        setUploadStatus(`Sending picture… ${percent}%`, 'busy');
       },
     });
     const via = result.path === 'fitpro-dial31' ? 'dial31' : 'baji';
+    setUploadStatus(result.verified === false
+      ? 'Transfer finished, but verification is unclear. Check the badge screen.'
+      : 'Transfer acknowledged. Check the picture on the badge screen.', 'ok');
     toast(
       result.verified === false
         ? 'Uploaded (verify unclear)'
@@ -530,6 +558,7 @@ async function pushImage() {
       $('#mediaIdPill').textContent = 'FitPro dial31';
     }
   } catch (e) {
+    setUploadStatus(`Upload failed: ${e.message}. You can try again.`, 'err');
     toast(e.message, 'err');
     log({ msg: e.message, level: 'err' });
   } finally {
