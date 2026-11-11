@@ -113,6 +113,23 @@ https://github.com/Jieli-Tech/Android-JL_Bluetooth/blob/main/code/PiHome_V1.13.0
 2. **Source-only peer fallback:** obtain the 200patch02+ peer-sharing module, find BLE advertising and receiver contract. Only if the standard file-read path is absent, build a safe, isolated receiver.
 3. **Hardware gate only after code proof:** connect, enumerate volumes (no deletions or OTA), and try retrieving one known harmless user image. Distinguish GATT reads from a true file-transfer protocol.
 
+## Public JieLi SDK source code: server-side file readback exists
+
+**Verified against JieLi GitLab project 1463 (`e_badge_707_sdk_200`) using a read-only source metadata API and limited source-symbol extraction.**
+
+[CI source inventory](https://github.com/sarthax/superband-web-client-rnd-BG02/actions/runs/42960677683) and [C/H source-symbol check](https://github.com/sarthax/superband-web-client-rnd-BG02/actions/runs/42960880393) located:
+
+- `SDK/apps/common/third_party_profile/jieli/rcsp/server/functions/browser/rcsp_browser.c` — includes `rcsp_browser_start`, `rcsp_browser_stop`, `rcsp_browser_dev_remap`, and a browse task.
+- `SDK/apps/common/third_party_profile/jieli/rcsp/server/functions/file_transfer/file_trans_back.c` — includes `rcsp_file_trans_back_opt`, `file_trans_back_task`, `rcsp_browser_dev_remap`, `fopen`, and `fread`. The vendor SDK contains a **real device-to-host file-return code path**.
+- `SDK/apps/common/third_party_profile/jieli/rcsp/server/functions/file_transfer/file_transfer.c` — contains separate file-download/receive functions and file handling, including `fopen`, `fread`, and `fwrite`.
+- `SDK/apps/common/third_party_profile/jieli/rcsp/server/functions/device_info/rcsp_device_feature.c` — contains file-transfer mode capability metadata.
+
+This source distinction matters: *the SDK's file-return command is implemented*, not merely named in Android SDK API docs. But existence in the **public generic SDK** is **not proof the BG02 V35922 image compiled it in**, enabled its handler, or mapped the user's wallpapers into an exposed RCSP filesystem.
+
+**DG01 nuance:** ElectronicCats' [DG01-specific `baji-ble` probe](https://github.com/ElectronicCats/jieli-ble-badge-research/blob/main/tools/baji-ble/baji_ble/sysinfo_probe.py) invokes a six-step `AE01/AE02` authentication and `GET_TARGET_INFO (0x03)` **without the E87 FD00 bootstrap path**. The earlier BG02 service table lacking E87's `FD00` therefore **does not disprove direct AE00 authentication**; it only makes the full E87 Qix control sequence inapplicable. Neither implementation has been validated against BG02 firmware V35922.
+
+**Implementation decision:** Do not build file-browser UI yet. First prove a BG02-compatible authenticated RCSP session, then determine whether `rcsp_browser_dev_remap` permits reading wallpaper storage. If the firmware doesn't expose this, follow the separate badge-to-badge wallpaper transport.
+
 ## Verified offline executable scan (November 10, 2026)
 
 **Completed on GitHub Actions:** [one successful unpacked app.bin audit](https://github.com/sarthax/superband-web-client-rnd-BG02/actions/runs/42954920377), with 6/6 firmware scanner tests passing.
