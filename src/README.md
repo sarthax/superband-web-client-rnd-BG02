@@ -4,7 +4,7 @@ All runnable client code lives here.
 
 | Path | Purpose |
 |------|---------|
-| `index.html`, `js/`, `css/`, `*.ts` | Primary Web Bluetooth manager — **Manager** + **Advanced** tabs (Bun) |
+| `index.html`, `js/`, `css/`, `*.ts` | Primary Web Bluetooth manager — **Pictures** + **Advanced** tabs (Bun) |
 | [`debug-console/`](debug-console/) | Low-level protocol probe |
 
 ## Manager setup
@@ -23,10 +23,10 @@ GitHub Pages build uses `BASE_PATH=/<repo>/` (set in CI).
 
 | Tab | Capabilities |
 |-----|----------------|
-| **Manager** | Multi-badge connect, DIS/battery glance, image push (Baji or FitPro dial31), media library |
+| **Pictures** | Connect, select ordinary photo, BG02 round crop/zoom with ETC2/RU50, upload and persistent status; device details optional, Baji library only on supported devices |
 | **Advanced** | OTA package prepare (CDN presets / local ufw), GATT·AE00 probe, JieLi BLE flash, legacy probes, security notes |
 
-Full tables: [`../docs/web-console.md`](../docs/web-console.md) · root [`../README.md`](../README.md).
+Full tables: [`../docs/web-console.md`](../docs/web-console.md) · [BG02 picture release gate](../docs/BG02-PICTURE-RELEASE-CHECKLIST.md) · root [`../README.md`](../README.md).
 
 ## Layout (manager)
 
