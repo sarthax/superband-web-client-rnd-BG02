@@ -43,7 +43,7 @@ function setPill(el, text, state = '') {
 function syncConnectionChrome() {
   const n = client.sessionCount;
   const on = n > 0 && client.connected;
-  $('[data-need-conn]').forEach((b) => {
+  $$('[data-need-conn]').forEach((b) => {
     b.disabled = !on;
   });
   // The upstream OTA firmware presets target BJ-1/DG01, not BG02 V1.5.
