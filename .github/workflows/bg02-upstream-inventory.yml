@@ -93,8 +93,8 @@ jobs:
                   candidates=set()
                   # Symbols only, not wholesale reproduction of vendor code.
                   patterns=[
-                      r'\\b(?:jl_wallpaper|wallpaper_sharing|file_browse|file_browser|rcsp_file|file_transfer|file_trans|rcsp_auth|fs_open|fopen|fread|fwrite)[A-Za-z0-9_]*\\b',
-                      r'\\b(?:rcsp|RCSP)_[A-Za-z0-9_]*(?:file|browse|transfer)[A-Za-z0-9_]*\\b',
+                      r'\b(?:jl_wallpaper|wallpaper_sharing|file_browse|file_browser|rcsp_file|file_transfer|file_trans|rcsp_auth|fs_open|fopen|fread|fwrite)[A-Za-z0-9_]*\b',
+                      r'\b(?:rcsp|RCSP)_[A-Za-z0-9_]*(?:file|browse|transfer)[A-Za-z0-9_]*\b',
                   ]
                   for pattern in patterns:
                       candidates.update(re.findall(pattern,src))
