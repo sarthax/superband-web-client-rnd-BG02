@@ -113,6 +113,14 @@ https://github.com/Jieli-Tech/Android-JL_Bluetooth/blob/main/code/PiHome_V1.13.0
 2. **Source-only peer fallback:** obtain the 200patch02+ peer-sharing module, find BLE advertising and receiver contract. Only if the standard file-read path is absent, build a safe, isolated receiver.
 3. **Hardware gate only after code proof:** connect, enumerate volumes (no deletions or OTA), and try retrieving one known harmless user image. Distinguish GATT reads from a true file-transfer protocol.
 
+## Verified offline executable scan (November 10, 2026)
+
+**Completed on GitHub Actions:** [one successful unpacked app.bin audit](https://github.com/sarthax/superband-web-client-rnd-BG02/actions/runs/42954920377), with 6/6 firmware scanner tests passing.
+
+The two committed archives were unpacked with `kagaimiq/jl-misctools`. Executables: **LJ733 V27550** `app.bin` **901,191 bytes** (SHA-256 `cc65774c7090767b4f16e84ec385b3c02e1718f4a7099ace43f51ff5f6112225`) and **LJ733B V34574** `app.bin` **973,060 bytes** (SHA-256 `d411db75de4d660289d199913f4a5aaad473166fb5afd17dd1f7eb101a8d9fd3`). Both show `storage/virfat_flash/C/`, `watch.sty`, `JL.sty`, `res_nor_dial`, `JLOTA` and `ble_ota` references. Neither yielded *plaintext* wallpaper-sharing, auth or RCSP file-browse symbols, which **does not rule out stripped binary handlers**.
+
+The complete reproducible offsets, firmware identities, limitations and next decision are in [BG02 firmware executable scan report](BG02-FIRMWARE-EXECUTABLE-SCAN-2026-11-10.md). These older builds are **not exact V35922**. The next research gate is obtaining the correct firmware or the complete JieLi receiver module, not another unauthenticated BLE query.
+
 ## Offline compatibility audit — November 10 follow-up
 
 Added `tools/bg02_firmware_evidence.py`: a Windows-compatible, standard-library-only, read-only scanner of ZIP members, UFWs and extracted binaries. It outputs SHA-256, member-relative offsets, and string hints for wallpaper sharing, wallpaper storage, RCSP file browsing, authentication, and BLE transport. No BLE access, flash commands or network access.
