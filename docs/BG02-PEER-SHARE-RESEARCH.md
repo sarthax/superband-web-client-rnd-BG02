@@ -117,11 +117,11 @@ https://github.com/Jieli-Tech/Android-JL_Bluetooth/blob/main/code/PiHome_V1.13.0
 
 ### Hardware results: both active attempts were silent
 
-The owner ran the one-shot active diagnostic **twice**, each with an 8-second window, using \`--probe-target-info\`. Both connected, subscribed to \`AE02\`, and reported **one \`AE01\` transmitted event and zero \`AE02\` received events**. Both runs used the same output JSONL path, so the second run overwrote the first; the terminal output independently confirms both.
+The owner ran the one-shot active diagnostic **twice**, each with an 8-second window, using `--probe-target-info`. Both connected, subscribed to `AE02`, and reported **one `AE01` transmitted event and zero `AE02` received events**. Both runs used the same output JSONL path, so the second run overwrote the first; the terminal output independently confirms both.
 
-**Important correction:** the probe sent \`FE DC BA C0 02 00 05 01 FF FF FF FF EF\`, which the earlier code incorrectly described as \`GET_TARGET_INFO\`. In the JieLi family, \`0x02\` is **GET_TARGET_FEATURE_MAP**, whereas **\`0x03\` is GET_TARGET_INFO**. The parameter structure for the real \`0x03\` target-info query also includes a one-byte platform field, yielding a **six-byte** body rather than five.
+**Important correction:** the probe sent `FE DC BA C0 02 00 05 01 FF FF FF FF EF`, which the earlier code incorrectly described as `GET_TARGET_INFO`. In the JieLi family, `0x02` is **GET_TARGET_FEATURE_MAP**, whereas **`0x03` is GET_TARGET_INFO**. The parameter structure for the real `0x03` target-info query also includes a one-byte platform field, yielding a **six-byte** body rather than five.
 
-Independent sources validating \`0x03\` mapping and the session precondition:
+Independent sources validating `0x03` mapping and the session precondition:
 - https://github.com/ElectronicCats/jieli-ble-badge-research/blob/main/tools/qix-ble/qix_ble/sysinfo.py
 - https://github.com/ElectronicCats/jieli-ble-badge-research/blob/main/tools/qix-ble/qix_ble/rcsp_session.py
 - https://github.com/jumpingmushroom/e87_badge/blob/main/docs/protocol.md
@@ -131,7 +131,7 @@ Independent sources validating \`0x03\` mapping and the session precondition:
 
 ### The missing precondition: JieLi application authentication
 
-In a **related AC707N badge** implementation (\`ElectronicCats/jieli-ble-badge-research\`), both \`get_target_info\` and \`RcspSession\` explicitly check an \`_auth_done\` flag before sending a request. The underlying implementation documents a **six-step cryptographic challenge–response exchange** on \`AE01/AE02\`, including raw frames that are *not* wrapped in \`FE DC BA\`. That source shows source-level filesystem readback tasks too, but we **cannot infer that BG02 V35922 uses the identical cipher, authentication state or file storage setup**.
+In a **related AC707N badge** implementation (`ElectronicCats/jieli-ble-badge-research`), both `get_target_info` and `RcspSession` explicitly check an `_auth_done` flag before sending a request. The underlying implementation documents a **six-step cryptographic challenge–response exchange** on `AE01/AE02`, including raw frames that are *not* wrapped in `FE DC BA`. That source shows source-level filesystem readback tasks too, but we **cannot infer that BG02 V35922 uses the identical cipher, authentication state or file storage setup**.
 
 Sources:
 - https://github.com/ElectronicCats/jieli-ble-badge-research/blob/main/tools/qix-ble/qix_ble/auth.py
@@ -140,16 +140,16 @@ Sources:
 
 ### Code state after correction
 
-- \`tools/bg02_rcsp_protocol.py\` now correctly labels \`0x02\` as \`GET_TARGET_FEATURE_MAP\` and \`0x03\` as \`GET_TARGET_INFO\`; its six-byte \`0x03\` request is an **offline fixture only**.
-- \`tools/bg02_rcsp_observe.py\` is passive again. The old \`--probe-target-info\` switch is **retired** and terminates with a clear error **before connecting or writing**. The previous command shown in older PR comments should **NOT** be rerun.
-- \`tools/tests/test_bg02_rcsp_observe.py\` checks protocol decoding, passive-only BLE behavior and early rejection of retired active mode. Actual tests were **not executed** in this follow-up; don't claim a new green hardware/CI receipt.
+- `tools/bg02_rcsp_protocol.py` now correctly labels `0x02` as `GET_TARGET_FEATURE_MAP` and `0x03` as `GET_TARGET_INFO`; its six-byte `0x03` request is an **offline fixture only**.
+- `tools/bg02_rcsp_observe.py` is passive again. The old `--probe-target-info` switch is **retired** and terminates with a clear error **before connecting or writing**. The previous command shown in older PR comments should **NOT** be rerun.
+- `tools/tests/test_bg02_rcsp_observe.py` checks protocol decoding, passive-only BLE behavior and early rejection of retired active mode. Actual tests were **not executed** in this follow-up; don't claim a new green hardware/CI receipt.
 
 ### Recommendation and next development gate
 
-**STOP** blind probes, including a corrected unauthenticated \`0x03\`, RCSP browse \`0x0C\`, and file return \`0x24\`. Do not try the related E87 six-step auth against BG02 until there is compatibility evidence.
+**STOP** blind probes, including a corrected unauthenticated `0x03`, RCSP browse `0x0C`, and file return `0x24`. Do not try the related E87 six-step auth against BG02 until there is compatibility evidence.
 
-1. Compare source evidence for V35922 or a close LJ733 firmware against the public JieLi \`AuthSession\`/RCSP implementation. If BG02-specific evidence verifies the authentication path, port a single source-backed **auth + \`0x03\` target info** diagnostic.
-2. If non-OTA RCSP cannot be verified, prioritize \`wallpaper_sharing_main.c\` and a receiving-peer GATT emulator rather than further AE00 writes.
+1. Compare source evidence for V35922 or a close LJ733 firmware against the public JieLi `AuthSession`/RCSP implementation. If BG02-specific evidence verifies the authentication path, port a single source-backed **auth + `0x03` target info** diagnostic.
+2. If non-OTA RCSP cannot be verified, prioritize `wallpaper_sharing_main.c` and a receiving-peer GATT emulator rather than further AE00 writes.
 3. Only after a valid authenticated RCSP response and accessible media storage are verified, add file listing and downloading. Keep media-delete/flash/OTA operations out of scope.
 
 ## BG02 V35922 hardware result — passive AE02 observer (2026-11-10)
@@ -188,39 +188,39 @@ The latter SDK documents an RCSP framing pattern **FE DC BA ... EF**, an authori
 ### Direct readback has a public sample implementation
 
 The official JieLi Android Health demo has:
-- \`FileBrowseManager.getOnlineDev()\` for enumerating online storage.
-- \`FileManagerDemo\` with \`GetFileByClusterTask.Param(devHandle, 0, cluster, localOutputPath)\`.
-- \`GetFileByNameTask.Param(devHandle, name, localOutputPath, unicode)\`.
-- \`WatchTestTool\` source \`ReadFileByNameTask.java\` and \`ReadFileByClusterTask.java\` showing progress, cancellation, and saving to phone paths.
+- `FileBrowseManager.getOnlineDev()` for enumerating online storage.
+- `FileManagerDemo` with `GetFileByClusterTask.Param(devHandle, 0, cluster, localOutputPath)`.
+- `GetFileByNameTask.Param(devHandle, name, localOutputPath, unicode)`.
+- `WatchTestTool` source `ReadFileByNameTask.java` and `ReadFileByClusterTask.java` showing progress, cancellation, and saving to phone paths.
 
 Vendor code:
 - https://github.com/Jieli-Tech/Android-JL_Health/blob/main/code/app/HealthAide_V1.1.0_SDK_V1.14.0/app/src/test/java/com/jieli/healthaide/demos/FileManagerDemo.java
 - https://github.com/Jieli-Tech/Android-JL_Health/blob/main/code/tool/WatchTestTool_V0.9.0_SDK_V1.14.0/app/src/main/java/com/jieli/watchtesttool/tool/test/filetask/ReadFileByNameTask.java
 - https://github.com/Jieli-Tech/Android-JL_Health/blob/main/code/tool/WatchTestTool_V0.9.0_SDK_V1.14.0/app/src/main/java/com/jieli/watchtesttool/tool/test/filetask/ReadFileByClusterTask.java
 
-This is stronger than inference from \`IFileOp\` alone; it is a working *SDK sample flow* on supported JieLi devices. **However, those sample files target general flash/SD storage and do not show BG02 V35922 or its wallpaper files being exposed.** Also, JieLi's RCSP authentication may prevent usable responses even if AE00 is present.
+This is stronger than inference from `IFileOp` alone; it is a working *SDK sample flow* on supported JieLi devices. **However, those sample files target general flash/SD storage and do not show BG02 V35922 or its wallpaper files being exposed.** Also, JieLi's RCSP authentication may prevent usable responses even if AE00 is present.
 
 ### Implemented: passive BG02 AE02 observation tool
 
-\`tools/bg02_rcsp_observe.py\` is a standalone Bleak utility which **subscribes** to AE02 notifications for a single short window. Optional \`--also-uart\` subscribes to the existing FitPro UART notification characteristic. It sends **no RCSP, file-management, FitPro, or OTA command**. As with any BLE notification subscription, it does enable the standard GATT CCCD descriptor. Connection and notification subscription might change peer-sharing behavior; this is not a transparent over-the-air sniffer.
+`tools/bg02_rcsp_observe.py` is a standalone Bleak utility which **subscribes** to AE02 notifications for a single short window. Optional `--also-uart` subscribes to the existing FitPro UART notification characteristic. It sends **no RCSP, file-management, FitPro, or OTA command**. As with any BLE notification subscription, it does enable the standard GATT CCCD descriptor. Connection and notification subscription might change peer-sharing behavior; this is not a transparent over-the-air sniffer.
 
-\`\`\`powershell
+```powershell
 # From the BG02 project root; disconnect SuperBand and the browser manager first.
 uv run --with bleak python tools/bg02_rcsp_observe.py --device BG02 --seconds 20 --output "D:\Claude\scratch\bg02_rcsp_observe.jsonl"
 
 # Offline analysis after the observation:
 py -3 tools/bg02_rcsp_observe.py --inspect "D:\Claude\scratch\bg02_rcsp_observe.jsonl"
-\`\`\`
+```
 
 The JSONL records only relative times, the notification characteristic and the raw payload hex; it intentionally omits MAC addresses, serial and model metadata. Payloads can nonetheless contain private data: **do not commit or publish unreviewed output**. This tool has **not** been run against the user's BG02.
 
-**Interpretation:** An \`FE DC BA\` magic prefix on AE02 would be evidence *consistent with* JieLi RCSP traffic. No notifications, or no visible prefix, would **not** prove absence of the protocol, especially if the badge expects authentication or a query before replying. The tool does **not** establish a file library or download function.
+**Interpretation:** An `FE DC BA` magic prefix on AE02 would be evidence *consistent with* JieLi RCSP traffic. No notifications, or no visible prefix, would **not** prove absence of the protocol, especially if the badge expects authentication or a query before replying. The tool does **not** establish a file library or download function.
 
 ### Implementation gate
 
 1. Determine whether BG02's AE00 channel provides **non-OTA RCSP** and authenticates to a compatible host. Do not send guessed commands.
 2. Establish whether the accessible RCSP file browser includes the **wallpaper storage** (not just general removable music storage).
-3. Only then implement listing and \`GetFileByNameTask\`/\`GetFileByClusterTask\`-equivalent download.
+3. Only then implement listing and `GetFileByNameTask`/`GetFileByClusterTask`-equivalent download.
 4. If unavailable, return to the peer-sharing receiver implementation.
 
 ## Specific code locations to inspect next (read-only)
