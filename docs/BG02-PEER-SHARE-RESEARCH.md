@@ -2,6 +2,28 @@
 
 Status: **RESEARCH ONLY**. No BLE writes, firmware flashing, source changes to the working JPG/PNG → RU50 uploader, or claim of a verified BG02 readback API.
 
+## Current next gate: passive receiver advertisement comparison (2026-11-10)
+
+**Updated hardware evidence:** The owner successfully completed the six-step JieLi AE00 authentication repeatedly, including with BG02 Send and Receive Picture selected. The `GET_TARGET_INFO` `0x03` command then generated **zero AE02 post-auth notifications**, timing out. A locally modified probe added `--raw-log`; that local code is **not** in this GitHub branch. Do not pull/reset/overwrite the user's in-progress instrumented files or repeat the authenticated query without new evidence.
+
+**Why this path:** JieLi's [707N peer-image-transfer demo](https://doc.zh-jieli.com/KDocs/master/手表穿戴技术应用文档入口汇总/707电子吧唧开发资料/707N蓝牙互传图传demo/) shows that one badge scans/initiates a connection and chooses a peer by advertising name. The demo calls the peer `wallpaper_adv`, but **we have not confirmed that name, the advertisement payload, or the BLE roles on stock BG02 V35922**.
+
+Implemented `tools/bg02_peer_advertisements.py`: **one passive, two-phase Windows Bleak advertisement capture**. It scans for 12 seconds with BG02 on its normal display, prompts the user to enter **Receive Picture**, then scans 15 more seconds. It compares advertisers, visible local names, UUIDs, manufacturer *IDs*, and hashes/lengths of advertising data. This only scans advertisements; it does **not** connect, enable notifications, authenticate, send RCSP, initiate a transfer, or alter badge files. Raw MAC addresses and advertising payloads are omitted from the output; device identities are hashed for phase matching. A receiver role may not advertise at all, and nearby devices create noise: absence of a difference is **not evidence that peer sharing is unsupported**.
+
+**Run once on Windows from the project root**, with SuperBand and the browser manager disconnected:
+
+```powershell
+cd D:\Claude\superband-bg02-research
+git fetch origin
+# Restore ONLY the new scanner file from the PR branch, preserving existing local probe edits.
+git restore --source=origin/research/bg02-peer-share-readback -- tools/bg02_peer_advertisements.py
+uv run --native-tls --with bleak python tools/bg02_peer_advertisements.py --output "D:\Claude\scratch\bg02_peer_adv.json"
+```
+
+The scanner prompts at the normal→Receive transition. The same report can be summarized offline with `py -3 tools/bg02_peer_advertisements.py --inspect "D:\Claude\scratch\bg02_peer_adv.json"`. **Share the console summary first**, not raw logs. This is a new, distinct receive-advertisement probe, *not* a repeat of the empty AE02 notification experiment. [CI verification of five offline checks](https://github.com/sarthax/superband-web-client-rnd-BG02/actions/runs/42969538978) passed.
+
+**Decision after capture:** A distinctive changed/added receiver advertisement can guide a capture-only Android or ESP32 peripheral emulator. If no relevant advertisement appears, prioritize obtaining the JieLi **200patch04** peer-sharing module or arranging a real two-badge transfer before claiming we know the receiver's contract. Never guess file-transfer commands or treat generic SDK wallpaper examples as stock BG02 proof.
+
 ## Why this exists
 
 The owner reports on **BG02, hardware LJ733_MB_V1.5, firmware V35922**:
