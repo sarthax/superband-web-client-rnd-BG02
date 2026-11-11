@@ -1,11 +1,14 @@
 # Badge-aware manager UI (BG02 V35922 and other badges)
 
+> **Historical PR #2 snapshot.** PR #3 added automatic browser JPG/PNG/WebP → ETC2/RU50 conversion and a circular crop editor. The BG02 picture manager now accepts ordinary photos **and** pre-encoded `.ru50`. See [current browser workflow](BG02-BROWSER-CROP.md) and [release checklist](BG02-PICTURE-RELEASE-CHECKLIST.md) for the current implementation.
+
+
 This change keeps the original Baji/FitPro transport and encoding paths but
 selects the user-facing image configuration based on the connected device.
 
 | Device | Size | Accepted image | Interface |
 |---|---|---|---|
-| BG02 / LJ733 (confirmed) | 240×240 fixed | pre-encoded RU50/ETC2 (.ru50) | Hide Baji media library, unsupported role/allocation options; disable BJ/DG OTA presets |
+| BG02 / LJ733 (confirmed) | 240×240 fixed | JPG/PNG/WebP via browser crop or pre-encoded RU50/ETC2 (.ru50) | Hide Baji media library, unsupported role/allocation options; disable BJ/DG OTA presets |
 | Baji | reported size if available, otherwise 360×360 | JPEG 4:4:4 | Show media library and role/media options |
 | Generic FitPro (BJ-1/DG01 etc.) | reported size if available, otherwise 360×360 | RGB565, or JPEG if algorithm 4 | Hide Baji-only controls |
 | Unknown / disconnected | 360×360 placeholder | no upload without connection | Neutral pre-connect labels |
@@ -16,11 +19,7 @@ The previous web UI accepted JPEG/PNG, decoded it in the browser and
 re-encoded it as **RGB565** even after the user manually set 240×240.
 BG02 V35922 acknowledges that transfer but displays black.
 
-The present branch **prevents that invalid transfer**. It does **not** yet
-integrate a browser-based ETC2 compressor. Use `tools/encode_bg02_ru50.py`
-from the other branch to create a 29,904-byte `.ru50` file from JPG/PNG,
-then choose `.ru50` in the web UI. This uses the existing, device-tested
-Dial31 path.
+PR #2 prevented the invalid RGB565 transfer. **PR #3 adds browser ETC2/RU50 conversion**, so ordinary photos are now the normal BG02 workflow. The original `tools/encode_bg02_ru50.py` remains an optional manual encoder for troubleshooting and importing pre-encoded `.ru50` files.
 
 Do not describe JPG as supported on BG02 until an offline-vs-browser
 ETC2 encoder comparison and hardware test confirms it.
@@ -29,9 +28,8 @@ ETC2 encoder comparison and hardware test confirms it.
 
 - After BG02 connects (name BG02 or hardware LJ733), both dimension
   controls become 240×240 and disabled.
-- Selecting JPG/PNG while BG02 is active yields a clear inline error,
-  with Upload disabled. No RGB565 data are transmitted.
-- Selecting `.ru50` validates the header/CRCs and enables upload.
+- Selecting JPG/PNG/WebP on BG02 opens a 240×240 circular crop; conversion to RU50/ETC2 happens at upload time. No BG02 RGB565 data are transmitted.
+- Selecting `.ru50` validates the header/CRCs and enables the original encoded-file upload fallback.
 - After switching to a different badge, size, format hints, picker filter,
   relevant media controls, and prepared image are refreshed.
 - Generic FitPro retains the original RGB565 path and editable dimensions.
