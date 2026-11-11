@@ -30,6 +30,13 @@ class ProtocolGuardError(RuntimeError):
     pass
 
 
+class ProbeStageError(RuntimeError):
+    def __init__(self, stage: str, reason_type: str):
+        super().__init__(stage)
+        self.stage = stage
+        self.reason_type = reason_type
+
+
 def classify_allowed_write(data: bytes, authenticated: bool) -> str:
     """Strict application-payload allowlist. No OTA / FS / rawflash calls."""
     if not authenticated:
@@ -103,12 +110,18 @@ def authenticated_read_only_session(transport, auth_only=False):
     from qix_ble.rcsp_session import RcspSession
     from qix_ble.sysinfo import get_target_info
 
-    AuthSession(transport, step_timeout=5.0).do_handshake()
-    if not transport._auth_done:
-        raise ProtocolGuardError("library did not confirm authentication")
+    try:
+        AuthSession(transport, step_timeout=5.0).do_handshake()
+        if not transport._auth_done:
+            raise ProtocolGuardError("library did not confirm authentication")
+    except Exception as exc:
+        raise ProbeStageError("authentication", type(exc).__name__) from None
     if auth_only:
         return {"authenticated": True, "target_info": "skipped"}
-    info = get_target_info(RcspSession(transport), timeout=8.0)
+    try:
+        info = get_target_info(RcspSession(transport), timeout=8.0)
+    except Exception as exc:
+        raise ProbeStageError("target_info", type(exc).__name__) from None
     # Do not emit raw attribute values: can contain MAC/serial/auth material.
     return {
         "authenticated": True,
@@ -146,13 +159,13 @@ async def run_live(device_name, auth_only):
 
         transport = Ae00AuthTransport(asyncio.get_running_loop(), client)
         await client.start_notify(AE02, transport.on_notify)
-        phase = "authentication"
         try:
             result = await asyncio.to_thread(authenticated_read_only_session, transport, auth_only)
         except Exception as exc:
             # Preserve stage/writes only. Avoid printing secrets from cipher errors.
-            print(json.dumps({"status": "stopped", "phase": phase,
-                              "reason_type": type(exc).__name__,
+            print(json.dumps({"status": "stopped",
+                              "phase": getattr(exc, "stage", "unknown"),
+                              "reason_type": getattr(exc, "reason_type", type(exc).__name__),
                               "writes": dict(transport.writes)}, indent=2))
             return 4
         print(json.dumps({"status": "ok", **result, "writes": dict(transport.writes)}, indent=2))
@@ -172,7 +185,7 @@ def main(argv=None):
         return 0
     try:
         return asyncio.run(run_live(args.device, args.auth_only))
-    except (OSError, RuntimeError, TimeoutError) as exc:
+    except Exception as exc:
         print("Bluetooth setup failed:", type(exc).__name__, file=sys.stderr)
         return 2
 
