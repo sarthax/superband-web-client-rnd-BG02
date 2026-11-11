@@ -149,7 +149,7 @@ async def run_live(device_name, auth_only):
         phase = "authentication"
         try:
             result = await asyncio.to_thread(authenticated_read_only_session, transport, auth_only)
-        except (RuntimeError, TimeoutError, ValueError) as exc:
+        except Exception as exc:
             # Preserve stage/writes only. Avoid printing secrets from cipher errors.
             print(json.dumps({"status": "stopped", "phase": phase,
                               "reason_type": type(exc).__name__,
