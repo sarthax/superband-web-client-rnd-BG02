@@ -13,14 +13,16 @@ from pathlib import Path
 SKIP = {'.git', '.venv', 'node_modules', 'build', 'output', 'target', '__pycache__'}
 SUFFIXES = {'.c', '.cc', '.cpp', '.h', '.hpp', '.java', '.kt', '.py', '.md', '.txt', '.map'}
 PATTERNS = {
-    'wallpaper-symbol': re.compile(r'\b(?:TCFG_JL_WALLPAPER_ENABLE|jl_wallpaper_[A-Za-z_]+)\b'),
+    'wallpaper-symbol': re.compile(r'\b(?:TCFG_JL_WALLPAPER_ENABLE|TCFG_JL_WALLPAPER_TEST_ENABLE|jl_wallpaper_[A-Za-z_]+|WALLPAPER_(?:CONFIG_FILE_NAME|NUMBER_MAX|PATH_LENGTH))\b'),
+    'peer-entry': re.compile(r'\b(?:ble_client_module_enable|jl_wallpaper_sharing_send|wallpaper_sharing_send|TCFG_JL_WALLPAPER_ADV_NAME)\b', re.I),
+    'peer-advert': re.compile(r'(?:wallpaper_adv|(?:scan|advertis|adv_|name_filter|target_name).{0,45}(?:wallpaper|peer|badge))', re.I),
     'peer-sharing': re.compile(r'(?:share[_ -]?pic(?:ture)?|recv[_ -]?pic(?:ture)?|receive[_ -]?pic(?:ture)?|互传|传图|碰一碰|壁纸互传)', re.I),
     'peer-ble-role': re.compile(r'(?:BLE_CENTRAL|BLE_MASTER|BT_ROLE_MASTER|ble_client|ble_central|gatt_client|scan_match|scan_target|target_name)', re.I),
     'media-path': re.compile(r'(?:bgp_wa%d\.avi|\.ru50|\.vie|\.gif|\.avi)', re.I),
     'wallpaper-generic': re.compile(r'\bwallpaper\b|壁纸', re.I),
     'file-transfer': re.compile(r'(?:rcsp.{0,35}(?:file|transfer)|(?:file|transfer).{0,35}rcsp|file_send|file_receive)', re.I),
 }
-WEIGHTS = {'wallpaper-symbol': 12, 'peer-sharing': 9, 'peer-ble-role': 5, 'media-path': 2, 'wallpaper-generic': 2, 'file-transfer': 3}
+WEIGHTS = {'wallpaper-symbol': 12, 'peer-entry': 20, 'peer-advert': 13, 'peer-sharing': 9, 'peer-ble-role': 5, 'media-path': 2, 'wallpaper-generic': 2, 'file-transfer': 3}
 
 
 def inspect(root: Path, max_bytes: int, max_matches: int) -> list[dict]:
@@ -45,10 +47,11 @@ def inspect(root: Path, max_bytes: int, max_matches: int) -> list[dict]:
                     totals[name] += 1
                 if len(found) < max_matches:
                     found.append({'line': line_number, 'kinds': matched, 'text': line.strip()[:220]})
-        if found:
-            score = sum(WEIGHTS[kind] * min(count, 12) for kind, count in totals.items())
-            rel = file.relative_to(root).as_posix()
-            reports.append({'file': rel, 'score': score, 'totals': {k: v for k, v in totals.items() if v}, 'matches': found})
+        rel = file.relative_to(root).as_posix()
+        name_match = file.name.lower() in {'wallpaper_sharing_main.c', 'wallpaper_sharing.h', 'lcd_ui_api.c', 'board_ac707n_demo_cfg.h'}
+        if found or name_match:
+            score = sum(WEIGHTS[kind] * min(count, 12) for kind, count in totals.items()) + (15 if name_match else 0)
+            reports.append({'file': rel, 'score': score, 'source_name_hint': name_match, 'totals': {k: v for k, v in totals.items() if v}, 'matches': found})
     return sorted(reports, key=lambda item: (-item['score'], item['file']))
 
 
