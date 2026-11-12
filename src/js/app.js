@@ -625,6 +625,8 @@ async function connect(acceptAll) {
 async function rebuildPreview() {
   const token = ++previewGeneration;
   const file = $('#imageInput').files?.[0];
+  // Every new photo/device starts with our already-working RU50 default.
+  $('#pictureCodec').value = 'ru50';
   prepared = null;
   invalidatePictureComparison('Choose a crop, then compare RU50 with JPEG.');
   updatePushChecklist();
@@ -786,6 +788,25 @@ async function pushImage() {
   updatePushChecklist();
   try {
     let uploadBytes = prepared.bytes;
+    if (activeProfile.bg02 && prepared.format === 'jpeg444') {
+      const storage = await client.refreshFitProStorage({ timeoutMs: 5000 });
+      const after = client.getSnapshot();
+      if (after.sessionId !== activeSnapshot.sessionId ||
+          !resolveBadgeProfile(after).jpegExperimentSupported) {
+        throw new Error('Badge identity or JPEG capability changed during preflight');
+      }
+      const estimate = estimatePictureStorage({
+        bg02: true, format: 'jpeg444',
+        encodedBytes: uploadBytes.length,
+        availableBytes: storage.reportedBytes,
+      });
+      if (estimate?.fits === false) {
+        throw new Error('Experimental JPEG needs ~' +
+          formatBytes(estimate.allocationHint) +
+          ' but only ~' + formatBytes(storage.reportedBytes) +
+          ' is reported free. No bytes were uploaded.');
+      }
+    }
     if (prepared.source === 'crop') {
       log({ msg: 'Cropping and converting the picture for BG02…', level:'info' });
       setUploadStatus('Converting your picture for BG02…', 'busy');
