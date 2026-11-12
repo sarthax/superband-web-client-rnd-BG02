@@ -1,5 +1,6 @@
 import { SuperBandBle } from './ble.js';
 import { inspectRu50, looksLikeBg02 } from './ru50.js';
+import { inspectBg02MjpegAvi } from './video-avi.js';
 import {
   Module,
   FileCmd,
@@ -617,7 +618,7 @@ class BadgeSession {
    * Android `gh3` pacing/ACKs; chunk size capped so each CD frame is one GATT write
    * (Web Bluetooth cannot safely stream mid-frame ATT fragments the way the Android stack does).
    */
-  async transferDialFile(fileBytes, { onProgress = null } = {}) {
+  async transferDialFile(fileBytes, { onProgress = null, dialTypeOverride = null } = {}) {
     if (this._transferring) throw new Error('Transfer already in progress on this badge');
     if (!this.connected) throw new Error('Not connected');
     this._transferring = true;
@@ -640,7 +641,14 @@ class BadgeSession {
       // Preserve the existing RU50 upload dialect even after a read-only
       // 0x20/2 query reports JPEG capability. Telemetry must not change what
       // the image sender previously transmitted.
-      const dialType = chooseFitProDialType(info, isRu50);
+      const dialType = dialTypeOverride ?? chooseFitProDialType(info, isRu50);
+      if (dialTypeOverride != null && dialTypeOverride !== 1) {
+        throw new Error('Only the BG02 AVI video dial type can override picture mode');
+      }
+      if (dialType === 1) {
+        if (!this.isKnownBg02V15) throw new Error('AVI requires the known BG02 V1.5 hardware');
+        inspectBg02MjpegAvi(fileBytes);
+      }
       const expectJpeg = dialType === 2;
       if (isRu50 && expectJpeg) throw new Error('RU50 requires dial type 0, not JPEG type 2');
       const looksJpeg =
@@ -662,7 +670,7 @@ class BadgeSession {
       this._log(
         `Dial31 size=${fileBlob.length} img=${fileBytes.length} ` +
           `chunk=${chunkSize} (atomic GATT, attMax=${attMax}) chunks=${totalChunks} ` +
-          `type=${dialType} ${isRu50 ? 'BG02 RU50/ETC2 (experimental)' : expectJpeg ? 'JPEG' : 'RGB565'} pace=${FitPro.COMMAND_POOL_MS}ms`,
+          `type=${dialType} ${dialType === 1 ? 'BG02 MJPEG AVI (experimental)' : isRu50 ? 'BG02 RU50/ETC2 (experimental)' : expectJpeg ? 'JPEG' : 'RGB565'} pace=${FitPro.COMMAND_POOL_MS}ms`,
         'info',
       );
       this._emit('transfer', {
@@ -764,6 +772,23 @@ class BadgeSession {
       this._transferring = false;
       this.hub._emitSessions();
     }
+  }
+
+  /** Experimental AVI path uses the confirmed Android FitPro dial type 1.
+   * Keep separate from transferFile/Photo to preserve picture behavior.
+   */
+  async transferVideoAvi(bytes, { onProgress = null } = {}) {
+    if (this.protocolMode !== 'fitpro' || !this.isKnownBg02V15) {
+      throw new Error('AVI upload is only enabled for the verified BG02 V1.5');
+    }
+    const avi = inspectBg02MjpegAvi(bytes);
+    if (avi.seconds > 5) {
+      this._log(
+        `Experimental AVI length ${avi.seconds}s exceeds the sole 5s hardware capture`,
+        'warn',
+      );
+    }
+    return this.transferDialFile(bytes, { onProgress, dialTypeOverride: 1 });
   }
 
   async stopTransfer() {
@@ -1018,6 +1043,10 @@ export class SuperBandClient extends EventTarget {
 
   async transferFile(fileBytes, opts) {
     return this._requireActive().transferFile(fileBytes, opts);
+  }
+
+  async transferVideoAvi(bytes, opts) {
+    return this._requireActive().transferVideoAvi(bytes, opts);
   }
 
   /** True if any connected session is mid-transfer. */
