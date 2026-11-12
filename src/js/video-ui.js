@@ -78,6 +78,12 @@ export function bindVideo({ client, log, toast, $ }) {
   function showRange() {
     if (!source) return;
     const s = selection();
+    if (source.kind === 'avi') {
+      els.startLabel.textContent = '0.0 s';
+      els.endLabel.textContent = fmtTime(source.durationSeconds);
+      els.rangeInfo.textContent = 'Compatible MJPEG AVI: pass through unchanged (no trim or re-encoding).';
+      return;
+    }
     els.startLabel.textContent = fmtTime(s.start);
     els.endLabel.textContent = fmtTime(s.end);
     const duration = Math.max(0, s.end - s.start);
@@ -108,14 +114,16 @@ export function bindVideo({ client, log, toast, $ }) {
     const supportedBadge = profile.bg02 && snapshot?.storageProbeSupported &&
       snapshot?.protocolMode === 'fitpro' && snapshot?.connected;
     const idle = !working && !uploading && !client.anyTransferring;
+    const aviOriginal = source?.kind === 'avi';
+    els.convert.textContent = aviOriginal ? 'Use AVI unchanged' : 'Convert & measure AVI';
     els.pick.disabled = !idle;
     els.input.disabled = !idle;
-    els.start.disabled = !source || !idle;
-    els.end.disabled = !source || !idle;
-    els.seconds.disabled = !idle;
-    els.quality.disabled = !idle;
-    els.fit.disabled = !idle;
-    els.loop.disabled = !idle;
+    els.start.disabled = !source || !idle || aviOriginal;
+    els.end.disabled = !source || !idle || aviOriginal;
+    els.seconds.disabled = !idle || aviOriginal;
+    els.quality.disabled = !idle || aviOriginal;
+    els.fit.disabled = !idle || aviOriginal;
+    els.loop.disabled = !idle || aviOriginal;
     els.convert.disabled = !source || !idle;
     els.download.disabled = !converted || !idle;
     const needed = converted?.info?.estimatedAllocationBytes;
@@ -181,10 +189,13 @@ export function bindVideo({ client, log, toast, $ }) {
       els.sourceDetails.textContent = candidate.name + ' · ' +
         candidate.width + '×' + candidate.height + ' · ' +
         fmtTime(candidate.durationSeconds) +
-        (candidate.kind === 'gif' ? ' · animated GIF' : ' · browser video');
+        (candidate.kind === 'gif' ? ' · animated GIF' :
+          candidate.kind === 'avi' ? ' · compatible MJPEG AVI' : ' · browser video');
       els.placeholder.hidden = true;
-      if (candidate.kind === 'gif') {
+      if (candidate.kind === 'gif' || candidate.kind === 'avi') {
         els.gif.src = candidate.previewUrl;
+        els.gif.alt = candidate.kind === 'avi' ?
+          'First frame of AVI' : 'Animated GIF source preview';
         els.gif.hidden = false;
       } else {
         els.player.src = candidate.previewUrl;
@@ -196,7 +207,9 @@ export function bindVideo({ client, log, toast, $ }) {
         candidate.durationSeconds < Number(els.seconds.value);
       syncMarkerLimits();
       showRange();
-      notify('Adjust the selection, then convert and measure its actual AVI size.');
+      notify(candidate.kind === 'avi'
+        ? 'Compatible AVI loaded. Use unchanged AVI to measure and upload.'
+        : 'Adjust the selection, then convert and measure its actual AVI size.');
       refresh();
     } catch (e) {
       if (request !== generation) return;
@@ -218,7 +231,13 @@ export function bindVideo({ client, log, toast, $ }) {
     refresh();
     progress(0, 'Decoding and encoding 240×240 MJPEG frames…');
     try {
-      const result = await convertVideoToBg02Avi(source, {
+      const result = source.kind === 'avi' ? {
+        bytes: source.aviBytes,
+        info: source.aviInfo,
+        thumbnail: source.previewUrl,
+        quality: 'original',
+        sourceName: source.name,
+      } : await convertVideoToBg02Avi(source, {
         ...selected,
         signal: controller.signal,
         onProgress: ({ percent, frame, total }) =>
@@ -233,7 +252,9 @@ export function bindVideo({ client, log, toast, $ }) {
         ' · ' + result.info.frames + ' frames / ' +
         fmtTime(result.info.seconds);
       const durationWarning = result.info.seconds > BG02_VIDEO.VERIFIED_SECONDS;
-      els.status.textContent = durationWarning
+      els.status.textContent = source.kind === 'avi'
+        ? 'Compatible AVI kept unchanged. You can upload this exact file as the control test.'
+        : durationWarning
         ? 'Converted. Longer-than-five-second playback is unverified; test on the badge.'
         : 'Converted. This AVI format matches the recovered 5-second file structure; playback must be checked.';
       log({ msg: 'Video AVI ready ' + result.bytes.length + ' bytes · ' +
