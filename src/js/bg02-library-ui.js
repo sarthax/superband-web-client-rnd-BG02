@@ -10,19 +10,30 @@
  */
 import { formatBytes } from './image.js';
 import { resolveBadgeProfile } from './device-profile.js';
+import { probeBg02MediaTransport, mediaTelemetryDiff } from './bg02-media-capabilities.js';
 
 export function bindBg02Library({ client, $, log }) {
   const el = {
     root: $('#bg02LibrarySection'),
     read: $('#btnBg02LibraryInspect'),
     export: $('#btnBg02LibraryExport'),
+    probe: $('#btnBg02MediaInterface'),
+    transport: $('#bg02MediaTransport'),
+    transportDetails: $('#bg02MediaTransportDetails'),
+    entries: $('#bg02MediaEntries'),
+    telemetry: $('#bg02MediaTelemetry'),
+    telemetrySummary: $('#bg02MediaTelemetrySummary'),
     free: $('#bg02LibraryFree'),
     count: $('#bg02LibraryCount'),
     algorithm: $('#bg02LibraryAlgorithm'),
     status: $('#bg02LibraryStatus'),
   };
   let reading = false;
+  let probing = false;
   let lastDiagnostic = null;
+  let transport = null;
+  let telemetry = [];
+  let telemetrySessionId = null;
 
   const allowed = (s = client.getSnapshot()) =>
     Boolean(s?.connected && s.storageProbeSupported &&
@@ -31,9 +42,42 @@ export function bindBg02Library({ client, $, log }) {
   function update(snapshot = client.getSnapshot()) {
     const supported = allowed(snapshot);
     el.root.hidden = !supported;
-    el.read.disabled = !supported || reading || client.anyTransferring;
-    el.export.disabled = !supported || !lastDiagnostic || reading ||
+    if (supported && telemetrySessionId !== snapshot.sessionId) {
+      // A different badge's readings are not comparable to this session.
+      telemetry = [];
+      transport = null;
+      lastDiagnostic = null;
+      telemetrySessionId = snapshot.sessionId;
+    }
+    el.read.disabled = !supported || reading || probing || client.anyTransferring;
+    el.probe.disabled = !supported || reading || probing || client.anyTransferring;
+    el.export.disabled = !supported || !lastDiagnostic || reading || probing ||
       lastDiagnostic.sessionId !== snapshot.sessionId;
+    el.transport.textContent = !supported ? 'Not connected' :
+      transport?.ae00Visible === true
+        ? transport.rcspService === 'ae00-rcsp-transport-candidate'
+          ? 'AE00 transport candidate' : 'AE00 incomplete'
+        : transport?.ae00Visible === false ? 'AE00 not accessible'
+        : transport ? 'Unknown — see details' : 'Not checked';
+    el.transportDetails.textContent = transport?.notes ||
+      'The check only discovers the standard RCSP AE00 GATT service; it sends no media command.';
+    el.entries.textContent = 'Not enumerated';
+    el.telemetry.hidden = !supported || !telemetry.length;
+    const latest = telemetry.at(-1);
+    const diff = telemetry.length > 1
+      ? mediaTelemetryDiff(telemetry[telemetry.length - 2], latest) : null;
+    el.telemetrySummary.textContent = !latest
+      ? 'Read media metadata twice to compare candidate count and free bytes.'
+      : 'Read ' + telemetry.length + ' time(s). Latest: count field=' +
+        latest.candidateCount + ', free=' + formatBytes(latest.freeBytes) +
+        (diff
+          ? ' · change since previous: count ' +
+            (diff.countDelta >= 0 ? '+' : '') + diff.countDelta +
+            ', free ' + (diff.freeBytesDelta >= 0 ? '+' : '') +
+            formatBytes(Math.abs(diff.freeBytesDelta)) +
+            (diff.freeBytesDelta < 0 ? ' used' : ' recovered')
+          : ' · read again after changing media on the badge to compare') +
+        '. Count-byte meaning remains unverified.';
     el.free.textContent = Number.isFinite(snapshot?.freeStorage)
       ? '~' + formatBytes(snapshot.freeStorage) : 'Not reported';
     el.count.textContent = Number.isInteger(snapshot?.dialPictureCountHint)
@@ -44,6 +88,9 @@ export function bindBg02Library({ client, $, log }) {
         ? '4 (JPEG)' : String(snapshot.dialAlgorithm);
     if (!supported) {
       lastDiagnostic = null;
+      transport = null;
+      telemetry = [];
+      telemetrySessionId = null;
       el.status.textContent =
         'Connect the verified BG02 V1.5. Listing and deletion are not implemented.';
     }
@@ -65,6 +112,13 @@ export function bindBg02Library({ client, $, log }) {
       const now = client.getSnapshot();
       if (now.sessionId !== snap.sessionId || !allowed(now))
         throw new Error('Badge switched or disconnected during read');
+      const readingRecord = {
+        observedAt: new Date().toISOString(),
+        candidateCount: dial.pictureNums,
+        freeBytes: storage.reportedBytes,
+      };
+      telemetry.push(readingRecord);
+      if (telemetry.length > 8) telemetry.shift();
       lastDiagnostic = {
         sessionId: snap.sessionId, // retained only in memory; not exported
         observedAt: new Date().toISOString(),
@@ -73,6 +127,8 @@ export function bindBg02Library({ client, $, log }) {
           hardware: now.hardware, firmware: now.firmware,
         },
         requests: ['FitPro 0x20/2', 'FitPro 0x20/4'],
+        transport: transport || { rcspService: 'not-checked', fileListingConfirmed: false },
+        mediaTelemetry: [...telemetry],
         dialInfo: {
           width: dial.width, height: dial.height,
           algorithm: dial.algorithm,
@@ -106,6 +162,36 @@ export function bindBg02Library({ client, $, log }) {
     }
   }
 
+  async function probeInterface() {
+    const snap = client.getSnapshot();
+    if (!allowed(snap) || reading || probing || client.anyTransferring) return;
+    const server = client.getActiveGattServer();
+    if (!server?.connected) {
+      el.status.textContent = 'No active connected GATT server to inspect.';
+      return;
+    }
+    probing = true;
+    el.status.textContent = 'Inspecting GATT AE00 availability — no vendor commands or writes…';
+    update(snap);
+    try {
+      const result = await probeBg02MediaTransport(server);
+      if (client.getSnapshot().sessionId !== snap.sessionId || !allowed())
+        throw new Error('Active badge switched or disconnected');
+      transport = result;
+      if (lastDiagnostic) lastDiagnostic.transport = result;
+      el.status.textContent = result.notes;
+      log({ msg: 'BG02 media GATT capability: ' + result.rcspService +
+        ' · no RCSP/list/delete command transmitted', level: 'info' });
+    } catch (e) {
+      transport = null;
+      el.status.textContent = 'GATT interface check unavailable: ' + e.message;
+      log({ msg: 'BG02 media GATT check: ' + e.message, level: 'warn' });
+    } finally {
+      probing = false;
+      update();
+    }
+  }
+
   function exportDiagnostic() {
     if (!lastDiagnostic || !allowed() ||
         lastDiagnostic.sessionId !== client.getSnapshot().sessionId) return;
@@ -123,6 +209,7 @@ export function bindBg02Library({ client, $, log }) {
   }
 
   el.read.addEventListener('click', () => void inspect());
+  el.probe.addEventListener('click', () => void probeInterface());
   el.export.addEventListener('click', exportDiagnostic);
   update();
   return { update };
