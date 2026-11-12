@@ -7,6 +7,7 @@
     <meta name="color-scheme" content="dark" />
     <title>BG02 Badge Manager</title>
     <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="css/video.css" />
   </head>
   <body>
     <div class="app">
@@ -80,6 +81,9 @@
         <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="manager">
           Pictures
         </button>
+        <button type="button" class="tab" role="tab" aria-selected="false" data-tab="video">
+          Video &amp; GIF
+        </button>
         <button type="button" class="tab" role="tab" aria-selected="false" data-tab="advanced">
           Advanced
         </button>
@@ -149,6 +153,8 @@
             </div>
           </section>
 
+
+
           <section class="section device-section">
             <h2>Device details</h2>
             <p class="lead">
@@ -211,6 +217,165 @@
               <div class="media-list" id="mediaList">
                 <div class="empty">Connect and refresh to load media.</div>
               </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div id="tab-video" class="tab-panel" role="tabpanel" hidden>
+        <div class="grid">
+          <section class="section video-section" id="videoSection" hidden>
+            <h2>Video &amp; animated GIF <small class="video-experiment-tag">Experimental</small></h2>
+            <p class="lead">Trim a segment, choose encoding quality, then check the exact AVI size before upload. The badge is verified with a 5-second, 3 fps MJPEG video; longer playback has not been confirmed.</p>
+            <div class="stack">
+              <div class="row">
+                <input class="file-input" id="videoInput" type="file" accept=".gif,image/gif,video/*,.mp4,.webm,.mov,.avi" />
+                <button type="button" id="videoPick">Choose GIF or video</button>
+                <span id="videoSourceDetails" class="muted">No video selected</span>
+              </div>
+              <div class="video-source-preview">
+                <video id="videoSourcePlayer" controls muted playsinline preload="metadata" hidden></video>
+                <img id="videoSourceGif" alt="Animated GIF source preview" hidden />
+                <span class="muted" id="videoPreviewPlaceholder">Select a video or animated GIF to preview</span>
+              </div>
+              <div class="video-trimmer">
+                <div class="video-marker-row">
+                  <label for="videoStart">Start marker <span id="videoStartLabel">0.0 s</span></label>
+                  <input id="videoStart" type="range" min="0" max="1" value="0" step="0.1" disabled />
+                </div>
+                <div class="video-marker-row">
+                  <label for="videoEnd">Stop marker <span id="videoEndLabel">0.0 s</span></label>
+                  <input id="videoEnd" type="range" min="0" max="1" value="1" step="0.1" disabled />
+                </div>
+                <div class="row">
+                  <label class="field">Maximum clip length
+                    <select id="videoSeconds">
+                      <option value="5" selected>5 seconds — verified</option>
+                      <option value="10">10 seconds — unverified</option>
+                      <option value="15">15 seconds — unverified</option>
+                      <option value="20">20 seconds — experimental</option>
+                      <option value="30">30 seconds — experimental</option>
+                    </select>
+                  </label>
+                  <label class="field">AVI frame rate
+                    <select id="videoFps">
+                      <option value="3" selected>3 fps — SuperBand reference</option>
+                      <option value="2">2 fps — experimental</option>
+                      <option value="1">1 fps — experimental</option>
+                      <option value="0.5">0.5 fps — experimental</option>
+                    </select>
+                  </label>
+                  <label class="field">Encoding
+                    <select id="videoQuality">
+                      <option value="low">Low — smaller</option>
+                      <option value="medium" selected>Medium</option>
+                      <option value="high">High — larger</option>
+                    </select>
+                  </label>
+                  <label class="field">Crop
+                    <select id="videoFit">
+                      <option value="cover" selected>Fill 240×240</option>
+                      <option value="contain">Fit with black bars</option>
+                    </select>
+                  </label>
+                </div>
+                <label class="check"><input id="videoLoop" type="checkbox" /> Repeat selected segment to fill the maximum length (off by default)</label>
+                <p id="videoRangeInfo" class="hint">The maximum duration never pads a shorter clip unless Repeat is enabled.</p>
+                <p id="videoFpsInfo" class="hint">3 fps is the captured SuperBand format. Lower fps might play at the wrong speed or not play.</p>
+              </div>
+              <div id="gifFramePicker" class="gif-frame-picker" hidden>
+                <h3>GIF frame picker</h3>
+                <p class="hint">View the original frames and pick a few to make a smaller animated slideshow. Selected frames play in their original order, at the hold time you choose.</p>
+                <label class="check"><input type="checkbox" id="gifUseFrames" /> Encode only my selected GIF frames</label>
+                <div class="row gif-frame-controls">
+                  <button type="button" id="gifPrev" disabled>Previous 24</button>
+                  <span id="gifPage" class="muted">—</span>
+                  <button type="button" id="gifNext" disabled>Next 24</button>
+                  <label class="field">Hold each chosen frame
+                    <select id="gifHold" disabled>
+                      <option value="1" selected>1 AVI frame (0.33 seconds)</option>
+                      <option value="2">2 AVI frames (0.67 seconds)</option>
+                      <option value="3">3 AVI frames (1 second)</option>
+                      <option value="6">6 AVI frames (2 seconds)</option>
+                    </select>
+                  </label>
+                  <button type="button" id="gifClear">Clear selected</button>
+                </div>
+                <p id="gifSelectedInfo" class="hint">No frames selected.</p>
+                <div id="gifFrameGrid" class="gif-frame-grid" aria-label="Original animated GIF frames"></div>
+              </div>
+              <section id="videoCropEditor" class="video-crop-editor" hidden aria-label="Video and GIF framing editor">
+                <h3>Pan &amp; zoom framing</h3>
+                <p class="hint">Drag to pan, use the zoom slider, mouse wheel, or two-finger pinch. The framing shown here is used for GIF thumbnails and the actual AVI. Select a GIF frame above to edit it individually.</p>
+                <div class="video-crop-layout">
+                  <canvas id="videoCropCanvas" width="240" height="240"
+                    aria-label="240 by 240 crop. Drag to pan the selected image. Use the zoom slider to resize." tabindex="0"></canvas>
+                  <div class="video-crop-settings">
+                    <div class="row">
+                      <button type="button" id="videoCropPrev">Previous selected frame</button>
+                      <button type="button" id="videoCropNext">Next selected frame</button>
+                    </div>
+                    <p id="videoCropFrameLabel" class="hint" role="status">Shared framing</p>
+                    <div class="row">
+                      <button type="button" id="videoCropModeShared" aria-pressed="true">Edit shared crop</button>
+                      <button type="button" id="videoCropModeFrame" aria-pressed="false">Edit this frame only</button>
+                    </div>
+                    <label class="field" for="videoCropZoom">Zoom <span id="videoCropZoomValue">100%</span>
+                      <input id="videoCropZoom" type="range" min="25" max="400" step="1" value="100" />
+                    </label>
+                    <div class="row">
+                      <button type="button" id="videoCropResetFrame">Reset current crop</button>
+                      <button type="button" id="videoCropUseShared">Use shared crop for this frame</button>
+                    </div>
+                    <div class="row">
+                      <button type="button" id="videoCropApplyAll">Apply to selected frames</button>
+                      <button type="button" id="videoCropApplyEvery">Apply to every GIF frame</button>
+                      <button type="button" id="videoCropResetAll">Reset all framing</button>
+                    </div>
+                    <p id="videoCropHint" class="hint">The default shared crop applies to all frames until you override individual selections.</p>
+                  </div>
+                </div>
+              </section>
+              <div class="row">
+                <button type="button" id="videoConvert" disabled>Convert &amp; measure AVI</button>
+                <button type="button" id="videoCancel" hidden>Cancel conversion</button>
+                <button type="button" id="videoDownload" disabled>Download AVI</button>
+                <button type="button" class="primary" id="videoUpload" disabled>Upload video</button>
+              </div>
+              <section id="videoCompare" class="video-compare" hidden aria-label="Source and encoded AVI comparison">
+                <h3>Source vs. encoded AVI</h3>
+                <div class="video-compare-grid">
+                  <figure class="video-compare-pane">
+                    <figcaption id="videoCompareSourceCaption">Source (sampled before encoding)</figcaption>
+                    <canvas id="videoCompareSource" width="240" height="240" aria-label="Original sampled source frame"></canvas>
+                  </figure>
+                  <figure class="video-compare-pane">
+                    <figcaption>Generated AVI (decoded MJPEG frame)</figcaption>
+                    <canvas id="videoCompareEncoded" width="240" height="240" aria-label="Actual JPEG frame extracted from encoded AVI"></canvas>
+                  </figure>
+                </div>
+                <div class="video-compare-controls">
+                  <div class="row">
+                    <button type="button" id="videoComparePrevious">Previous frame</button>
+                    <button type="button" id="videoComparePlay">Play preview</button>
+                    <button type="button" id="videoCompareNext">Next frame</button>
+                    <span id="videoComparePosition" class="mono">Frame —</span>
+                  </div>
+                  <input id="videoCompareSeek" type="range" min="0" max="0" value="0" step="1"
+                    aria-label="Scrub synchronized AVI comparison frame" />
+                </div>
+                <p id="videoCompareDescription" class="hint"></p>
+              </section>
+              <div class="video-output-preview">
+                <img id="videoOutputFrame" alt="First frame of encoded AVI" hidden />
+                <div>
+                  <p id="videoExactSize" class="video-size">Not converted yet</p>
+                  <p id="videoSpaceInfo" class="hint">Actual video bytes and an estimated storage allocation appear after conversion.</p>
+                  <p id="videoTransferWarning" class="hint">No audio. Clips longer than 5 seconds could be shortened or rejected by the badge.</p>
+                </div>
+              </div>
+              <p id="videoStatus" class="hint" role="status" aria-live="polite">Conversion runs locally in your browser. The photo uploader is unchanged.</p>
+              <div class="progress" id="videoProgress" role="progressbar" aria-label="Video conversion or upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i id="videoBar"></i></div>
             </div>
           </section>
         </div>
