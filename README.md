@@ -27,6 +27,20 @@ The **Video & GIF** tab accepts common browser-playable videos and animated GIFs
 
 The original SuperBand capture was 3 fps for five seconds. The owner separately reported successful 1 fps playback on BG02; longer lengths and other settings remain experimental. Output has no audio; AVI size and storage allocation are measured before upload.
 
+### Portable local editing projects
+
+Both picture and video/GIF editors can **Save project** and **Open project**.
+The project ZIP bundles the original source and crop/trim/quality/frame settings
+so editing can resume on another machine. Opening a project never uploads to
+the badge; conversion and comparison must be repeated before sending.
+Prepared JPEG/RU50 bytes can also be downloaded after review.
+
+Following a successful picture upload, the manager displays the observed
+before/after BG02 free-space delta (when available) alongside its estimated
+8 KiB-rounded allocation. This is **not** a file list or full storage map.
+
+See [local project details](docs/BG02-LOCAL-PROJECTS.md).
+
 ### Media diagnostics — read-only
 
 The BG02 section can query FitPro **`0x20/2`** (dial info) and **`0x20/4`** (free storage), compare repeated storage readings, export sanitized diagnostics, and check whether **AE00/AE01/AE02** is present. This **does not list stored media files**. The legacy Baji file listing/deletion implementation is explicitly not available on BG02.
