@@ -14,7 +14,7 @@ The user's recovered AVI from the SuperBand app contains:
 
 ## Video workbench
 
-A separate video panel accepts browser-playable MP4, WebM, or animated GIF, with source preview, start/stop trim markers, a **maximum length** of 5, 10, 15, 20 or 30 seconds, Low/Medium/High JPEG quality, and square crop or letterbox. Its default is **no repeat**: a 3-second selection with a 5-second maximum produces **9 frames / 3 seconds**, not a padded 15-frame video. Repeating the selected sequence to fill the cap is explicitly opt-in. Output is **240×240 / 3fps MJPEG AVI without audio**.
+A separate video panel accepts browser-playable MP4, WebM, or animated GIF, with source preview, start/stop trim markers, a **maximum length** of 5, 10, 15, 20 or 30 seconds, frame rate **3 fps (reference), 2/1/0.5 fps (experimental)**, Low/Medium/High JPEG quality, and square crop or letterbox. Its default is **no repeat**: a 3-second selection with a 5-second maximum produces **9 frames / 3 seconds**, not a padded 15-frame video. Repeating the selected sequence to fill the cap is explicitly opt-in. Output is **240×240 / 3fps MJPEG AVI without audio**.
 
 Existing compatible 240×240/3fps MJPEG AVI can also be imported and passed through **unchanged**, with a first-frame poster. This allows testing the BLE uploader using the exact recovered SuperBand AVI before testing the new browser encoder.
 
@@ -22,11 +22,11 @@ After encoding, it shows the **exact AVI byte count**, first-frame preview, prob
 
 Animated GIF decoding uses Chrome/Edge ImageDecoder (WebCodecs), which is not available in every browser. This app already requires a Web Bluetooth-capable Chromium browser. Unsupported input video codecs will fail with an explicit message. Chrome may not decode MJPEG AVI as source, even though the badge may accept that output.
 
-The Repeat checkbox means **repeat frames inside the converted AVI** and is **off by default**. It does not configure the badge's separate slideshow or media-display time limit. Output durations are quantized to 1/3 second because the BG02 reference AVI uses 3fps; a short interval under one frame produces one frame.
+The Repeat checkbox means **repeat frames inside the converted AVI** and is **off by default**. It does not configure the badge's separate slideshow or media-display time limit. Output durations are quantized to the chosen frame interval (0.33s at 3fps, 0.5s at 2fps, 1s at 1fps, and 2s at 0.5fps). For example, at **0.5 fps with a 5-second maximum**, only **2 frames / 4 seconds** fit. Generating a third would produce 6 seconds and exceed the limit. Very short intervals may require a minimum of one video frame.
 
 ### Select individual GIF frames
 
-The optional **GIF frame picker** displays original composited GIF frames in pages of 24 thumbnails. Click to select or deselect; selections persist between pages. The selected frames are encoded in source order, not repeated, unless Repeat is explicitly enabled. Choose how long each selected frame remains on screen: **0.33, 0.67, 1 or 2 seconds**, corresponding to 1, 2, 3 or 6 MJPEG frames per selected image. The maximum clip duration still caps output.
+The optional **GIF frame picker** displays original composited GIF frames in pages of 24 thumbnails. Click to select or deselect; selections persist between pages. The selected frames are encoded in source order, not repeated, unless Repeat is explicitly enabled. Choose how long each selected frame remains on screen using **1, 2, 3 or 6 output frames**. At the reference 3fps those are 0.33, 0.67, 1 and 2 seconds. At experimental 1fps they become 1, 2, 3 and 6 seconds. At 0.5fps each video frame lasts 2 seconds and longer holds are capped by maximum clip length. The maximum clip duration still caps output.
 
 For example, **5 selected frames × 0.33s = 5 AVI frames, 1.67s**. If held for 1s each, they produce **15 MJPEG frames, 5s**. Because MJPEG stores a complete JPEG for every output frame, fewer *distinct selected source frames* only save substantial space when the **total output frame count** is reduced. Holding a still frame for multiple output ticks repeats encoded JPEG data, so file size may not decrease nearly as much. The final AVI size preview is authoritative and the badge may still round file allocation.
 
@@ -58,3 +58,47 @@ From the src directory:
 - bun run build
 
 The tests use synthetic JPEG marker frames for AVI structure; they cannot qualify browser-JPEG output or actual hardware playback.
+
+## Experimental fractional AVI frame rates
+
+The recovered successful Android AVI is **3 fps only**. This branch now offers
+**2 fps, 1 fps, and 0.5 fps** explicitly marked experimental. The 3fps original
+remains the default; the picture encoder and sender have not been changed.
+
+The AVI encoder adjusts both `avih.dwMicroSecPerFrame` and the stream's
+`strh.dwScale/dwRate` as an exact rational timebase:
+
+| Selected rate | dwRate | dwScale | Frame interval | Frames under 5s cap |
+|---|---:|---:|---:|---:|
+| 3 fps (reference) | 3 | 1 | 0.333s | 15 (5.0s) |
+| 2 fps (experimental) | 2 | 1 | 0.5s | 10 (5.0s) |
+| 1 fps (experimental) | 1 | 1 | 1s | 5 (5.0s) |
+| 0.5 fps (experimental) | 1 | 2 | 2s | 2 (4.0s) |
+
+The UI previews the real output frame count/duration and frame-count reduction
+relative to 3fps *before* encoding. The final AVI byte count remains the
+authoritative encoding size, not a bitrate estimate. Fewer JPEG frames can
+reduce bytes significantly, but 8KiB allocation rounding and image content
+may limit actual recovered badge free space.
+
+The inspector and separate video sender now accept the four rates, but a lower
+rate requires **explicit user confirmation** before any transfer. **The device
+may ignore the AVI header, play at 3fps anyway, truncate, or reject it.**
+Do not use a successful BLE ACK as proof that playback duration is correct.
+
+### Small hardware shakeout
+
+1. Keep the existing 3fps picture/video pathways untouched.
+2. With a short, unchanged source/quality, convert once at **3fps**, download
+   the AVI and note its size and playback on the badge.
+3. Convert the same selection at **1fps** (five seconds = five JPEG frames).
+   Check downloaded AVI size; upload only if it fits the fresh storage query;
+   check that each still remains for one second on the badge.
+4. Only if 1fps behaves, optionally try **0.5fps**; a 5-second maximum
+   produces **4 seconds**, not 6.
+5. If lower fps clips play too quickly or don't display, retain 3fps as the
+   operational baseline. Tests of GIF thumbnails and browser JPEG encoding
+   remain manual device/browser checks.
+
+Added targeted test coverage for all four AVI header timebases, 0.5fps clipping,
+1fps GIF frame selection/holds, and the no-automatic-repeat rule.
