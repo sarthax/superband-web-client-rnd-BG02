@@ -52,7 +52,21 @@ export const FitPro = {
 export function looksLikeFitProBadge(name) {
   if (!name) return false;
   const n = String(name);
-  return /^(BJ|DG)/i.test(n) || /BadgeOK|SuperBand|_V\d/i.test(n);
+  // BG02 advertises a short GAP name on production V35922; not just
+  // LJ733_V1_BadgeOK. Skipping this led to a pointless Baji request timeout.
+  return /^(BJ|DG)/i.test(n) ||
+    /^BG02(?:$|[_-])/i.test(n) ||
+    /BadgeOK|SuperBand|_V\d/i.test(n);
+}
+
+/** Device identity gate for BG02-only read-only probes.
+ * The actual badge may advertise either BG02 or LJ733_V1_BadgeOK.
+ * Keep both name AND board revision checks; do not query unrelated BJ/DG.
+ */
+export function isKnownBg02V15Identity(name, hardware) {
+  return /^LJ733_MB_V1\.5$/i.test(String(hardware || '').trim()) &&
+    (/^BG02(?:$|[_-])/i.test(String(name || '').trim()) ||
+     /^LJ733(?:$|_)/i.test(String(name || '').trim()));
 }
 
 function putU16BE(out, offset, value) {
