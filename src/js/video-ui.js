@@ -1,5 +1,6 @@
 /** BG02 video UI; separate from all picture-selection/crop/upload state. */
-import { openVideoSource, convertVideoToBg02Avi } from './video-convert.js';
+import { openVideoSource, convertVideoToBg02Avi, gifFrameThumbnail } from './video-convert.js';
+import { planTrimmedVideo, planGifStoryboard } from './video-timeline.js';
 import { formatBytes } from './image.js';
 import { BG02_VIDEO } from './video-avi.js';
 import { resolveBadgeProfile } from './device-profile.js';
@@ -22,6 +23,15 @@ export function bindVideo({ client, log, toast, $ }) {
     fit: $('#videoFit'),
     loop: $('#videoLoop'),
     rangeInfo: $('#videoRangeInfo'),
+    gifPicker: $('#gifFramePicker'),
+    gifUseFrames: $('#gifUseFrames'),
+    gifPrev: $('#gifPrev'),
+    gifNext: $('#gifNext'),
+    gifPage: $('#gifPage'),
+    gifHold: $('#gifHold'),
+    gifClear: $('#gifClear'),
+    gifSelectedInfo: $('#gifSelectedInfo'),
+    gifFrameGrid: $('#gifFrameGrid'),
     convert: $('#videoConvert'),
     cancel: $('#videoCancel'),
     download: $('#videoDownload'),
@@ -40,6 +50,10 @@ export function bindVideo({ client, log, toast, $ }) {
   let working = false;
   let uploading = false;
   let generation = 0;
+  let framePage = 0;
+  let thumbnailEpoch = 0;
+  const selectedGifFrames = new Set();
+  const FRAMES_PER_PAGE = 24;
 
   const fmtTime = (seconds) => Number(seconds || 0).toFixed(1) + ' s';
   const notify = (message, level = 'info') => {
@@ -72,29 +86,57 @@ export function bindVideo({ client, log, toast, $ }) {
     return {
       start, end, seconds, quality: els.quality.value,
       fit: els.fit.value, loop: els.loop.checked,
+      frameIndices: source.kind === 'gif' && els.gifUseFrames.checked ?
+        [...selectedGifFrames] : null,
+      holdFrames: Number(els.gifHold.value),
     };
   }
 
   function showRange() {
     if (!source) return;
-    const s = selection();
+    const sel = selection();
     if (source.kind === 'avi') {
       els.startLabel.textContent = '0.0 s';
       els.endLabel.textContent = fmtTime(source.durationSeconds);
       els.rangeInfo.textContent = 'Compatible MJPEG AVI: pass through unchanged (no trim or re-encoding).';
       return;
     }
-    els.startLabel.textContent = fmtTime(s.start);
-    els.endLabel.textContent = fmtTime(s.end);
-    const duration = Math.max(0, s.end - s.start);
-    els.rangeInfo.textContent = 'Source selection ' + fmtTime(duration) +
-      ' (' + fmtTime(s.start) + '–' + fmtTime(s.end) + ') → AVI ' +
-      fmtTime(s.seconds) + ' at 3 fps / ' +
-      Math.round(s.seconds * BG02_VIDEO.FPS) + ' frames' +
-      (s.loop ? ' · repeat selected segment' : ' · no repeat');
+    els.startLabel.textContent = fmtTime(sel.start);
+    els.endLabel.textContent = fmtTime(sel.end);
+    if (source.kind === 'gif') {
+      const selected = selectedGifFrames.size;
+      els.gifSelectedInfo.textContent = selected + ' of ' + source.ends.length +
+        ' original GIF frames selected. ' +
+        (els.gifUseFrames.checked ? 'Selection controls AVI output.' :
+          'Enable “Encode only my selected GIF frames” to use them.');
+    }
+    try {
+      const plan = sel.frameIndices !== null
+        ? planGifStoryboard({
+          frameIndices: sel.frameIndices,
+          sourceFrameCount: source.ends.length,
+          holdFrames: sel.holdFrames, maxSeconds: sel.seconds,
+          loop: sel.loop,
+        })
+        : planTrimmedVideo({
+          start: sel.start, end: sel.end,
+          maxSeconds: sel.seconds, loop: sel.loop,
+        });
+      const label = sel.frameIndices !== null
+        ? selectedGifFrames.size + ' chosen frames'
+        : 'Source segment ' + fmtTime(sel.end - sel.start) +
+          ' (' + fmtTime(sel.start) + '–' + fmtTime(sel.end) + ')';
+      els.rangeInfo.textContent = label + ' → ' +
+        plan.frameCount + ' AVI frames / ' + fmtTime(plan.seconds) +
+        ' (maximum ' + fmtTime(sel.seconds) + ')' +
+        (plan.clipped ? ' · selection capped' : '') +
+        (plan.repeated ? ' · repeated by choice' : ' · no automatic repeat');
+    } catch (e) {
+      els.rangeInfo.textContent = e.message;
+    }
     if (source.kind === 'video') {
       els.player.currentTime = Math.max(0, Math.min(
-        source.durationSeconds - .04, s.start,
+        source.durationSeconds - .04, sel.start,
       ));
     }
   }
@@ -115,16 +157,25 @@ export function bindVideo({ client, log, toast, $ }) {
       snapshot?.protocolMode === 'fitpro' && snapshot?.connected;
     const idle = !working && !uploading && !client.anyTransferring;
     const aviOriginal = source?.kind === 'avi';
+    const gif = source?.kind === 'gif';
+    const useFrames = gif && els.gifUseFrames.checked;
+    els.gifPicker.hidden = !gif;
+    els.gifUseFrames.disabled = !gif || !idle;
+    els.gifHold.disabled = !useFrames || !idle;
+    els.gifPrev.disabled = !gif || !idle || framePage === 0;
+    els.gifNext.disabled = !gif || !idle ||
+      (framePage + 1) * FRAMES_PER_PAGE >= (source?.ends?.length || 0);
+    els.gifClear.disabled = !gif || !idle || selectedGifFrames.size === 0;
     els.convert.textContent = aviOriginal ? 'Use AVI unchanged' : 'Convert & measure AVI';
     els.pick.disabled = !idle;
     els.input.disabled = !idle;
-    els.start.disabled = !source || !idle || aviOriginal;
-    els.end.disabled = !source || !idle || aviOriginal;
+    els.start.disabled = !source || !idle || aviOriginal || useFrames;
+    els.end.disabled = !source || !idle || aviOriginal || useFrames;
     els.seconds.disabled = !idle || aviOriginal;
     els.quality.disabled = !idle || aviOriginal;
     els.fit.disabled = !idle || aviOriginal;
     els.loop.disabled = !idle || aviOriginal;
-    els.convert.disabled = !source || !idle;
+    els.convert.disabled = !source || !idle || (useFrames && !selectedGifFrames.size);
     els.download.disabled = !converted || !idle;
     const needed = converted?.info?.estimatedAllocationBytes;
     const free = snapshot?.freeStorage;
@@ -157,13 +208,8 @@ export function bindVideo({ client, log, toast, $ }) {
   }
 
   function setPreset() {
-    if (!source) return;
-    const start = Number(els.start.value) || 0;
-    els.end.value = String(Math.min(
-      source.durationSeconds, start + Number(els.seconds.value),
-    ));
-    syncMarkerLimits();
-    invalidated();
+    // Preset caps output duration: do not alter the selected source interval.
+    if (source) invalidated();
   }
 
   async function chooseFile() {
@@ -173,6 +219,11 @@ export function bindVideo({ client, log, toast, $ }) {
     const request = ++generation;
     source?.close();
     source = null;
+    thumbnailEpoch++;
+    framePage = 0;
+    selectedGifFrames.clear();
+    els.gifUseFrames.checked = false;
+    els.gifFrameGrid.replaceChildren();
     clearOutput();
     els.player.pause();
     els.player.hidden = true;
@@ -202,11 +253,11 @@ export function bindVideo({ client, log, toast, $ }) {
         els.player.hidden = false;
       }
       els.start.value = '0';
-      els.end.value = String(Math.min(candidate.durationSeconds, 5));
-      els.loop.checked = candidate.kind === 'gif' ||
-        candidate.durationSeconds < Number(els.seconds.value);
+      els.end.value = String(candidate.durationSeconds);
+      els.loop.checked = false; // Never repeat short GIFs implicitly.
       syncMarkerLimits();
       showRange();
+      if (candidate.kind === 'gif') void renderFramePage();
       notify(candidate.kind === 'avi'
         ? 'Compatible AVI loaded. Use unchanged AVI to measure and upload.'
         : 'Adjust the selection, then convert and measure its actual AVI size.');
