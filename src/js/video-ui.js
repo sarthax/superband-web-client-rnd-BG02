@@ -6,6 +6,9 @@ import { BG02_VIDEO } from './video-avi.js';
 import { resolveBadgeProfile } from './device-profile.js';
 import { AviComparisonPreview } from './video-preview.js';
 import { VideoCropEditor } from './video-crop-ui.js';
+import {
+  videoAllocationTarget, videoOptimizationProfiles, chooseVideoOptimizationResult,
+} from './video-storage-optimizer.js';
 import { createBg02Project, readBg02Project } from './editor-project.js';
 
 export function bindVideo({ client, log, toast, $ }) {
@@ -44,6 +47,11 @@ export function bindVideo({ client, log, toast, $ }) {
     cancel: $('#videoCancel'),
     download: $('#videoDownload'),
     upload: $('#videoUpload'),
+    optimize: $('#videoOptimize'),
+    optimizeBucket: $('#videoOptimizeBucket'),
+    optimizeRates: $('#videoOptimizeFrameRates'),
+    optimizeReport: $('#videoOptimizeReport'),
+    observedStorage: $('#videoObservedStorage'),
     outputFrame: $('#videoOutputFrame'),
     exactSize: $('#videoExactSize'),
     spaceInfo: $('#videoSpaceInfo'),
@@ -143,10 +151,11 @@ export function bindVideo({ client, log, toast, $ }) {
         ' (' + duration.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + ' seconds)';
     }
     els.fpsInfo.textContent = fps === 3
-      ? '3 fps matches the recovered SuperBand format. Frame duration: 0.33 seconds.'
-      : fps + ' fps is experimental: each complete frame lasts ' +
-        (1 / fps).toFixed(2).replace(/0+$/, '').replace(/\.$/, '') +
-        ' seconds. Playback speed and acceptance are not yet verified.';
+      ? '3 fps matches the original SuperBand capture (0.33 seconds per frame).'
+      : fps === 1
+        ? '1 fps playback was confirmed on BG02; each frame lasts one second.'
+        : fps + ' fps remains experimental: each complete frame lasts ' +
+          (1 / fps).toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + ' seconds.';
   }
 
   function showRange() {
@@ -256,6 +265,11 @@ export function bindVideo({ client, log, toast, $ }) {
     els.fit.disabled = !idle || aviOriginal;
     els.loop.disabled = !idle || aviOriginal;
     els.convert.disabled = !source || !idle || (useFrames && !selectedGifFrames.size);
+    els.optimize.disabled = !source || !idle || aviOriginal ||
+      Number(els.seconds.value)>BG02_VIDEO.VERIFIED_SECONDS ||
+      (useFrames && !selectedGifFrames.size);
+    els.optimizeBucket.disabled = !idle;
+    els.optimizeRates.disabled = !idle;
     els.download.disabled = !converted || !idle;
     const needed = converted?.info?.estimatedAllocationBytes;
     const free = snapshot?.freeStorage;
@@ -431,6 +445,41 @@ export function bindVideo({ client, log, toast, $ }) {
     }
   }
 
+
+  function showConvertedResult(result, selected, message = null) {
+    converted = result;
+    // Decode real JPEGs from the completed AVI (not the browser's native
+    // AVI video decoder) and place them beside the exact sampled source.
+    // Preview problems must not turn a correctly encoded file into a failure.
+    try {
+      comparison.setResult(result);
+    } catch (e) {
+      for (const frame of result.referenceFrames || []) frame.close();
+      result.referenceFrames = null;
+      log({ msg: 'AVI side-by-side preview unavailable: ' + e.message, level: 'warn' });
+    }
+    els.outputFrame.src = result.thumbnail;
+    els.outputFrame.hidden = false;
+    els.exactSize.textContent = 'AVI: ' + formatBytes(result.bytes.length) +
+      ' (' + result.bytes.length.toLocaleString() + ' bytes)' +
+      ' · ' + result.info.frames + ' frames at ' +
+      result.info.fps + ' fps / ' + fmtTime(result.info.seconds);
+    const durationWarning = result.info.seconds > BG02_VIDEO.VERIFIED_SECONDS;
+    const experimentalFps = result.info.fps !== BG02_VIDEO.FPS;
+    els.status.textContent = experimentalFps
+      ? 'AVI converted. ' + result.info.fps +
+        ' fps is experimental — badge playback may be sped up, truncated or rejected.'
+      : source.kind === 'avi'
+      ? 'Original 3 fps AVI kept unchanged. You can upload this exact file.'
+      : durationWarning
+      ? 'Converted. Longer-than-five-second playback is unverified; test on the badge.'
+      : 'Converted at the recovered 3 fps reference; browser JPEG playback needs a badge check.';
+    log({ msg: 'Video AVI ready ' + result.bytes.length + ' bytes · ' +
+      result.info.frames + ' frames · quality=' + selected.quality +
+      ' · ' + result.info.seconds + 's · ' + result.info.fps + 'fps', level: 'ok' });
+    if (message) els.status.textContent = message;
+  }
+
   async function convert() {
     if (!source || working || uploading) return;
     const selected = selection();
@@ -459,36 +508,7 @@ export function bindVideo({ client, log, toast, $ }) {
         for (const frame of result.referenceFrames || []) frame.close();
         return;
       }
-      converted = result;
-      // Decode real JPEGs from the completed AVI (not the browser's native
-      // AVI video decoder) and place them beside the exact sampled source.
-      // Preview problems must not turn a correctly encoded file into a failure.
-      try {
-        comparison.setResult(result);
-      } catch (e) {
-        for (const frame of result.referenceFrames || []) frame.close();
-        result.referenceFrames = null;
-        log({ msg: 'AVI side-by-side preview unavailable: ' + e.message, level: 'warn' });
-      }
-      els.outputFrame.src = result.thumbnail;
-      els.outputFrame.hidden = false;
-      els.exactSize.textContent = 'AVI: ' + formatBytes(result.bytes.length) +
-        ' (' + result.bytes.length.toLocaleString() + ' bytes)' +
-        ' · ' + result.info.frames + ' frames at ' +
-        result.info.fps + ' fps / ' + fmtTime(result.info.seconds);
-      const durationWarning = result.info.seconds > BG02_VIDEO.VERIFIED_SECONDS;
-      const experimentalFps = result.info.fps !== BG02_VIDEO.FPS;
-      els.status.textContent = experimentalFps
-        ? 'AVI converted. ' + result.info.fps +
-          ' fps is experimental — badge playback may be sped up, truncated or rejected.'
-        : source.kind === 'avi'
-        ? 'Original 3 fps AVI kept unchanged. You can upload this exact file.'
-        : durationWarning
-        ? 'Converted. Longer-than-five-second playback is unverified; test on the badge.'
-        : 'Converted at the recovered 3 fps reference; browser JPEG playback needs a badge check.';
-      log({ msg: 'Video AVI ready ' + result.bytes.length + ' bytes · ' +
-        result.info.frames + ' frames · quality=' + selected.quality +
-        ' · ' + result.info.seconds + 's · ' + result.info.fps + 'fps', level: 'ok' });
+      showConvertedResult(result, selected);
     } catch (e) {
       if (e.name !== 'AbortError') notify('Conversion failed: ' + e.message, 'err');
       else notify('Conversion cancelled.');
@@ -500,6 +520,98 @@ export function bindVideo({ client, log, toast, $ }) {
     }
   }
 
+
+
+  async function optimizeVideo() {
+    if (!source || source.kind==='avi' || working || uploading ||
+        client.anyTransferring) return;
+    const original = selection();
+    if (!original || original.seconds > BG02_VIDEO.VERIFIED_SECONDS) {
+      notify('Choose a maximum duration of 5 seconds for bounded AVI optimization.', 'err');
+      return;
+    }
+    const sequence=++generation;
+    const controller=new AbortController();
+    pending=controller;
+    working=true;
+    clearOutput();
+    refresh();
+    const candidates=[];
+    const failures=[];
+    const cleanup = item => {
+      for (const frame of item?.referenceFrames || []) frame.close();
+      if (item) item.referenceFrames=null;
+    };
+    try {
+      const profiles=videoOptimizationProfiles(original.fps,
+        els.optimizeRates.value==='compare');
+      const baselineKey=original.fps+':'+original.quality;
+      const baseline=await convertVideoToBg02Avi(source,{
+        ...original,signal:controller.signal,
+        onProgress:({percent})=>progress(percent/Math.max(1,profiles.length),
+          'Measuring AVI baseline at '+original.fps+' fps…'),
+      });
+      candidates.push({fps:original.fps,quality:original.quality,result:baseline});
+      const target=videoAllocationTarget(baseline.bytes.length,
+        Number(els.optimizeBucket.value));
+      for(let i=0;i<profiles.length;i++) {
+        if(controller.signal.aborted || sequence!==generation)
+          throw new DOMException('Conversion cancelled','AbortError');
+        const profile=profiles[i];
+        if(profile.fps+':'+profile.quality===baselineKey)continue;
+        let convertedTrial=null;
+        try {
+          convertedTrial=await convertVideoToBg02Avi(source,{
+            ...original,
+            fps:profile.fps,quality:profile.quality,
+            holdSeconds:Number(els.gifHold.value)/profile.fps,
+            signal:controller.signal,
+            onProgress:({percent})=>progress(
+              Math.round(100*(i+percent/100)/profiles.length),
+              'Measuring '+profile.fps+' fps / '+profile.quality+'…'),
+          });
+          candidates.push({...profile,result:convertedTrial});
+        } catch(e) {
+          if(e.name==='AbortError')throw e;
+          failures.push(profile.fps+' fps '+profile.quality+': '+e.message);
+          cleanup(convertedTrial);
+        }
+      }
+      if(controller.signal.aborted || sequence!==generation)
+        throw new DOMException('Conversion cancelled','AbortError');
+      const best=chooseVideoOptimizationResult(candidates,target,original.fps);
+      const report=candidates.map(c=>c.fps+' fps '+c.quality+' '+
+        formatBytes(c.result.bytes.length)+' ('+
+        formatBytes(c.result.info.estimatedAllocationBytes)+ ' allocated)').join(' · ');
+      els.optimizeReport.textContent=
+        'Storage target '+formatBytes(target)+' · '+report+
+        (failures.length?' · skipped '+failures.join('; '):'');
+      if(!best) {
+        notify('No tested AVI quality fits '+formatBytes(target)+
+          '. Try the current allocation, 1 fps, or a shorter clip.', 'err');
+        return;
+      }
+      // Prefer the user's selected frame rate whenever one of its quality
+      // presets fits, and only lower/switch rates if needed.
+      els.fps.value=String(best.fps);
+      els.quality.value=best.quality;
+      updateFrameRateLabels();
+      showConvertedResult(best.result,
+        {...original,fps:best.fps,quality:best.quality},
+        'Optimized locally: '+best.fps+' fps / '+best.quality+
+        ' · '+formatBytes(best.result.bytes.length)+' AVI · ~'+
+        formatBytes(best.result.info.estimatedAllocationBytes)+
+        ' allocation. Check playback and upload only when ready.');
+      log({msg:'AVI allocation optimizer selected '+best.fps+' fps / '+
+        best.quality+' out of '+candidates.length+' exact encodes',level:'ok'});
+    }catch(e){
+      if(e.name==='AbortError')notify('AVI optimization cancelled.');
+      else notify('AVI optimization failed: '+e.message,'err');
+    }finally{
+      for(const c of candidates)if(c.result!==converted)cleanup(c.result);
+      working=false;pending=null;els.progress.hidden=true;refresh();
+    }
+  }
 
   function saveVideoState() {
     if (!source || !els.input.files?.[0])
@@ -665,6 +777,7 @@ export function bindVideo({ client, log, toast, $ }) {
   els.pick.addEventListener('click', () => els.input.click());
   els.input.addEventListener('change', chooseFile);
   els.convert.addEventListener('click', convert);
+  els.optimize.addEventListener('click', () => void optimizeVideo());
   els.cancel.addEventListener('click', () => pending?.abort());
   els.download.addEventListener('click', download);
   els.upload.addEventListener('click', upload);
