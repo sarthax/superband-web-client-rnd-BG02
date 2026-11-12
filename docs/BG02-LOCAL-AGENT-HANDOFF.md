@@ -32,6 +32,7 @@ files actually stored on the badge. **One local Claude agent, end to end.**
 
 ## Repo sources — read these first
 
+- `docs/BG02-V35922-OTA-FIRMWARE-ACQUISITION-HANDOFF.md` — complete OTA acquisition history, original APK/HTTP catalog workflow, related-device ZIP receipts, and why no **BG02 V35922** stock image was obtained. Do not conflate a related firmware with an exact hardware match.
 - `docs/BG02-MEDIA-LIST-FEASIBILITY.md` — current GATT/RCSP result,
   protocol framing and caveats.
 - `docs/BG02-STORAGE-READONLY.md` — confirmed FitPro hex packets,
