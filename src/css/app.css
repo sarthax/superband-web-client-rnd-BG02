@@ -1042,3 +1042,16 @@ input[type='number'] {
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+/* Read-only BG02 media discovery: do not imply a live file inventory. */
+.bg02-library .media-telemetry {
+  display: grid;
+  gap: .35rem;
+  padding: .7rem .8rem;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(0,0,0,.16);
+}
+.bg02-library .media-telemetry[hidden] { display: none; }
+.bg02-library .media-telemetry strong { font-size: .83rem; }
+.bg02-library .media-telemetry .hint { margin: 0; }

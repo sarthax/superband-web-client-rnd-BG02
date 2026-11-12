@@ -234,13 +234,19 @@ export async function listGattSummary(server) {
   const rows = [];
   for (const s of services) {
     const chars = await s.getCharacteristics();
+    // BluetoothRemoteGATTCharacteristicProperties attributes are WebIDL
+    // getters, not necessarily enumerable own properties. Object.entries()
+    // shows [] in Chrome even when write/notify/read are actually supported.
+    const flags = [
+      'broadcast', 'read', 'writeWithoutResponse', 'write', 'notify',
+      'indicate', 'authenticatedSignedWrites', 'reliableWrite',
+      'writableAuxiliaries',
+    ];
     rows.push({
       uuid: s.uuid,
       characteristics: chars.map((c) => ({
         uuid: c.uuid,
-        properties: Object.entries(c.properties)
-          .filter(([, v]) => v)
-          .map(([k]) => k),
+        properties: flags.filter(k => c.properties?.[k] === true),
       })),
     });
   }
