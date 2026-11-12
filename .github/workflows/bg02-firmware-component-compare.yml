@@ -5,6 +5,7 @@ on:
     branches: [research/bg02-peer-share-readback]
     paths:
       - '.github/workflows/bg02-firmware-component-compare.yml'
+      - 'tools/bg02_compare_firmware.py'
   workflow_dispatch:
 
 permissions:
