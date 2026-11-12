@@ -20,6 +20,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 KNOWN_LOOKUP = [
     "V35922",  # live BG02, previous documented response: no offered update
+    "V35509",  # observed BG02-family LJ733_MB_V1.1, independent ebadge report; NOT V1.5 predecessor proof
     "V34574",  # LJ733B/HYX target from V34250, not BG02
     "V34576",  # LJ733B/HYX target from V32449, not BG02
     "V34250",  # known LJ733B/HYX predecessor
