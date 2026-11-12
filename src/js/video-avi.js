@@ -200,6 +200,7 @@ export function inspectBg02MjpegAvi(input) {
 
 /** Rounded allocation is an empirical hint, not a proven erase-block map. */
 export function estimateVideoAllocation(bytes) {
-  return Math.ceil(bytes / BG02_VIDEO.ALLOCATION_HINT_BYTES) *
+  // Upload adds a four-byte length prefix before the AVI bytes.
+  return Math.ceil((bytes + 4) / BG02_VIDEO.ALLOCATION_HINT_BYTES) *
     BG02_VIDEO.ALLOCATION_HINT_BYTES;
 }
