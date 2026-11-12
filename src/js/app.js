@@ -220,9 +220,17 @@ function renderPictureSize(snapshot = client.getSnapshot()) {
     return;
   }
   box.hidden = false;
+  const selectedFormat = profile.bg02 && prepared.source !== 'encoded'
+    ? pictureCodec() : prepared.format;
+  const measuredBytes = profile.bg02 && prepared.source !== 'encoded'
+    ? (pictureComparison
+      ? (selectedFormat === 'jpeg444' ? pictureComparison.jpeg : pictureComparison.ru50).bytes.length
+      : null)
+    : prepared.bytes?.length ?? null;
   const estimated = estimatePictureStorage({
     bg02: profile.bg02,
-    encodedBytes: prepared.bytes?.length ?? null,
+    format: selectedFormat,
+    encodedBytes: measuredBytes,
     sourceBytes: file.size,
     availableBytes: snapshot?.freeStorage ?? null,
   });
@@ -232,8 +240,11 @@ function renderPictureSize(snapshot = client.getSnapshot()) {
   $('#pictureSourceSize').textContent = formatBytes(file.size) + dims;
   $('#pictureEncodedSize').textContent = estimated
     ? formatBytes(estimated.encodedBytes) +
-      (profile.bg02 ? ' · RU50/ETC2 240×240 (exact)' : ' · encoded')
-    : 'Waiting for encoding';
+      (profile.bg02
+        ? (selectedFormat === 'jpeg444' ? ' · JPEG 4:4:4 (measured)' :
+          ' · RU50/ETC2 240×240 (fixed)')
+        : ' · encoded')
+    : 'Not encoded — select Convert & compare';
   $('#pictureAllocation').textContent = estimated?.allocationHint != null
     ? '~' + formatBytes(estimated.allocationHint) + ' (8 KiB-rounded estimate)'
     : 'Not established for this model';
@@ -244,15 +255,18 @@ function renderPictureSize(snapshot = client.getSnapshot()) {
     : 'Not reported';
   if (estimated?.fits === false) free.classList.add('picture-too-large');
   $('#pictureSpaceHint').textContent = profile.bg02
-    ? estimated?.fits === false
-      ? 'Estimated image allocation exceeds the last reported free space. ' +
-        'The picture will not fit without first freeing storage on the badge.'
-      : estimated?.freeAfterHint != null
-        ? 'Estimated free after upload: ~' +
-          formatBytes(estimated.freeAfterHint) +
-          '. The 8 KiB allocation rounding is empirical, not proven flash geometry.'
-        : 'The output is fixed-size RU50; connect BG02 to compare with its free storage. ' +
-          '8 KiB allocation rounding is only an estimate.'
+    ? selectedFormat === 'jpeg444' && !pictureComparison
+      ? 'Experimental JPEG needs a current Convert & compare result; ' +
+        'file size cannot be estimated before encoding.'
+      : estimated?.fits === false
+        ? 'Estimated image allocation exceeds the last reported free space. ' +
+          'Please free storage before uploading.'
+        : estimated?.freeAfterHint != null
+          ? 'Estimated free after upload: ~' +
+            formatBytes(estimated.freeAfterHint) +
+            '. The 8 KiB allocation rounding is empirical, not proven flash geometry.'
+          : 'Connect BG02 to compare your encoded size with the reported free space. ' +
+            'Allocation rounding is only an estimate.'
     : 'Estimated storage allocation is available only for BG02; ' +
       'the selected image has not changed.';
 }
@@ -411,6 +425,7 @@ function applyBadgeProfile(snapshot = client.getSnapshot()) {
   $('#dialWidthOption').title = profile.fixedSize ? 'Fixed for the BG02 display' : '';
   $('#dialHeightOption').title = profile.fixedSize ? 'Fixed for the BG02 display' : '';
   $('#imageInput').accept = profile.fileAccept;
+  if (!profile.bg02) invalidatePictureComparison('BG02 comparison unavailable on this device.');
   $('#btnPickImage').textContent = profile.chooseLabel;
   $('#imageFormatHelp').textContent = profile.formatLabel;
   $('#imageInputHint').textContent = profile.formatHelp;
@@ -509,8 +524,12 @@ function renderSnapshot(snap) {
 
 function updatePushChecklist() {
   const connected = client.connected;
-  const imageReady = !!prepared;
-  const idle = !transferring && !client.anyTransferring;
+  const profile = resolveBadgeProfile(client.getSnapshot());
+  // For source photos on BG02 the exact bytes must already be previewed.
+  // This prevents uploading a stale crop or silently bypassing JPEG quality.
+  const imageReady = !!prepared &&
+    !(profile.bg02 && prepared.source === 'crop');
+  const idle = !transferring && !pictureComparing && !client.anyTransferring;
   const storageProbe = client.getSnapshot()?.storageProbeSupported;
   $('#btnRefreshStorage').disabled = !connected || !idle || !storageProbe;
   const map = { conn: connected, image: imageReady, idle };
@@ -519,7 +538,6 @@ function updatePushChecklist() {
     if (!li) continue;
     li.dataset.ok = ok ? '1' : '0';
   }
-  const profile = resolveBadgeProfile(client.getSnapshot());
   const compatible = imageMatchesBadge(prepared, profile, client.getSnapshot());
   const canPush = connected && imageReady && compatible && idle;
   $('#btnPush').disabled = !canPush;
@@ -532,6 +550,7 @@ function updatePushChecklist() {
   $('#cropZoom').disabled = !idle;
   $('#cropReset').disabled = !idle;
   $('#cropCanvas').style.pointerEvents = idle ? 'auto' : 'none';
+  updatePictureCodecControls();
 }
 
 function renderMediaList(items) {
@@ -605,6 +624,7 @@ async function rebuildPreview() {
   const token = ++previewGeneration;
   const file = $('#imageInput').files?.[0];
   prepared = null;
+  invalidatePictureComparison('Choose a crop, then compare RU50 with JPEG.');
   updatePushChecklist();
   hideCropper();
   setUploadStatus(file ? 'Preparing picture preview…' : 'Choose a picture to get started.');
@@ -667,10 +687,13 @@ async function rebuildPreview() {
        resolveBadgeProfile(now).format !== next.format) return;
 
     prepared = next;
+    updatePictureCodecControls(now);
     renderPictureSize(now);
-    setUploadStatus(profile.bg02
-      ? 'Picture ready. Adjust the crop if needed, then select Upload picture.'
-      : 'Picture ready. Select Upload to badge.', 'ok');
+    setUploadStatus(profile.bg02 && next.source === 'crop'
+      ? 'Adjust framing, then Convert & compare before uploading.'
+      : profile.bg02
+        ? 'Encoded RU50 selected. You can upload the existing file.'
+        : 'Picture ready. Select Upload to badge.', 'ok');
     if (isRu50) {
       $('#dialPreview').hidden = true;
       $('#dialPlaceholder').hidden = false;
