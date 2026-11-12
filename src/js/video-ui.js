@@ -229,6 +229,8 @@ export function bindVideo({ client, log, toast, $ }) {
   function invalidated() {
     generation++;
     clearOutput();
+    els.optimizeReport.textContent =
+      'Options changed. Optimize again for the new crop, trim or frame selection.';
     showRange();
     notify('Options changed. Convert again to measure the exact AVI size.');
     refresh();
@@ -389,12 +391,15 @@ export function bindVideo({ client, log, toast, $ }) {
     const file = els.input.files?.[0];
     if (!file) return;
     const request = ++generation;
+    els.observedStorage.textContent = 'No AVI upload measured in this session.';
     cropEditor.clear();
     source?.close();
     source = null;
     thumbnailEpoch++;
     framePage = 0;
     selectedGifFrames.clear();
+    els.optimizeReport.textContent =
+      'Choose 5 seconds or less, then optimize locally. No upload occurs.';
     els.gifUseFrames.checked = false;
     els.gifFrameGrid.replaceChildren();
     clearOutput();
@@ -465,15 +470,16 @@ export function bindVideo({ client, log, toast, $ }) {
       ' · ' + result.info.frames + ' frames at ' +
       result.info.fps + ' fps / ' + fmtTime(result.info.seconds);
     const durationWarning = result.info.seconds > BG02_VIDEO.VERIFIED_SECONDS;
-    const experimentalFps = result.info.fps !== BG02_VIDEO.FPS;
-    els.status.textContent = experimentalFps
-      ? 'AVI converted. ' + result.info.fps +
-        ' fps is experimental — badge playback may be sped up, truncated or rejected.'
-      : source.kind === 'avi'
-      ? 'Original 3 fps AVI kept unchanged. You can upload this exact file.'
-      : durationWarning
-      ? 'Converted. Longer-than-five-second playback is unverified; test on the badge.'
-      : 'Converted at the recovered 3 fps reference; browser JPEG playback needs a badge check.';
+    const unverifiedFps = ![1,3].includes(result.info.fps);
+    els.status.textContent = durationWarning
+      ? 'Converted. Longer-than-five-second playback is unverified; check the badge.'
+      : unverifiedFps
+        ? 'AVI converted at experimental ' + result.info.fps + ' fps; verify playback.'
+        : source.kind === 'avi'
+          ? 'Original compatible AVI preserved byte for byte.'
+          : result.info.fps === 1
+            ? '1 fps AVI prepared. BG02 1 fps playback was previously confirmed.'
+            : '3 fps AVI prepared using the recovered SuperBand reference rate.';
     log({ msg: 'Video AVI ready ' + result.bytes.length + ' bytes · ' +
       result.info.frames + ' frames · quality=' + selected.quality +
       ' · ' + result.info.seconds + 's · ' + result.info.fps + 'fps', level: 'ok' });
@@ -713,8 +719,8 @@ export function bindVideo({ client, log, toast, $ }) {
     }
     const item = converted;
     if (item.info.seconds > BG02_VIDEO.VERIFIED_SECONDS ||
-        item.info.fps !== BG02_VIDEO.FPS) {
-      const warning = item.info.fps !== BG02_VIDEO.FPS
+        ![1,3].includes(item.info.fps)) {
+      const warning = ![1,3].includes(item.info.fps)
         ? 'This ' + item.info.fps +
           ' fps AVI is experimental. The badge may reject it or play it at the wrong speed.'
         : 'The badge playback limit beyond 5 seconds is unverified.';
@@ -753,6 +759,25 @@ export function bindVideo({ client, log, toast, $ }) {
       }
       notify('Video transfer acknowledged. Verify playback and loop duration on the badge.');
       toast('Video transfer acknowledged — check badge playback', 'ok');
+      try {
+        const fresh = await client.refreshFitProStorage({ timeoutMs: 5000 });
+        if (client.getSnapshot().sessionId === activeId &&
+            Number.isSafeInteger(fresh.reportedBytes)) {
+          const consumed = free - fresh.reportedBytes;
+          els.observedStorage.textContent =
+            'Reported storage before ' + formatBytes(free) +
+            ' · after ' + formatBytes(fresh.reportedBytes) +
+            ' · change ' + (consumed>=0?'-':'+') +
+            formatBytes(Math.abs(consumed)) +
+            ' · predicted AVI allocation ' +
+            formatBytes(item.info.estimatedAllocationBytes) +
+            '. Replacing media may reclaim prior blocks.';
+        }
+      } catch(e) {
+        els.observedStorage.textContent =
+          'AVI acknowledged; post-upload storage refresh unavailable.';
+        log({msg:'AVI post-upload storage: '+e.message,level:'warn'});
+      }
       log({ msg: 'Video upload complete via FitPro dial type 1: ' +
         item.bytes.length + ' AVI bytes; playback still needs device check', level: 'ok' });
     } catch (e) {
