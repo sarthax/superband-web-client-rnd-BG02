@@ -5,6 +5,7 @@ import { formatBytes } from './image.js';
 import { BG02_VIDEO } from './video-avi.js';
 import { resolveBadgeProfile } from './device-profile.js';
 import { AviComparisonPreview } from './video-preview.js';
+import { VideoCropEditor } from './video-crop-ui.js';
 
 export function bindVideo({ client, log, toast, $ }) {
   const els = {
@@ -70,6 +71,22 @@ export function bindVideo({ client, log, toast, $ }) {
   let thumbnailEpoch = 0;
   const selectedGifFrames = new Set();
   const FRAMES_PER_PAGE = 24;
+  const cropEditor = new VideoCropEditor({
+    $,
+    selectedFrames: selectedGifFrames,
+    getFit: () => els.fit.value,
+    previewVideo: els.player,
+    canEdit: () => !working && !uploading && !client.anyTransferring,
+    onChanged: () => {
+      generation++;
+      clearOutput();
+      notify('Framing changed. Convert again to see the updated AVI.');
+      refresh();
+    },
+    onThumbsDirty: () => {
+      if (source?.kind === 'gif') void renderFramePage();
+    },
+  });
 
   const fmtTime = (seconds) => Number(seconds || 0).toFixed(1) + ' s';
   const notify = (message, level = 'info') => {
@@ -109,6 +126,7 @@ export function bindVideo({ client, log, toast, $ }) {
       // Frame holds are whole output frames; this is the exact duration
       // (one frame at 0.5fps lasts two seconds).
       holdSeconds: Number(els.gifHold.value) / Number(els.fps.value),
+      ...cropEditor.snapshot(),
     };
   }
 
@@ -210,6 +228,7 @@ export function bindVideo({ client, log, toast, $ }) {
     const supportedBadge = profile.bg02 && snapshot?.storageProbeSupported &&
       snapshot?.protocolMode === 'fitpro' && snapshot?.connected;
     const idle = !working && !uploading && !client.anyTransferring;
+    cropEditor.setDisabled(!idle);
     const aviOriginal = source?.kind === 'avi';
     const gif = source?.kind === 'gif';
     const useFrames = gif && els.gifUseFrames.checked;
@@ -279,7 +298,8 @@ export function bindVideo({ client, log, toast, $ }) {
     for (let i = from; i < to; i++) {
       let poster;
       try {
-        poster = await gifFrameThumbnail(original, i);
+        poster = await gifFrameThumbnail(original, i,
+          cropEditor.cropForFrame(i), els.fit.value);
       } catch (e) {
         if (token === thumbnailEpoch) {
           log({ msg: 'GIF frame #' + (i + 1) + ': ' + e.message, level: 'warn' });
@@ -287,9 +307,12 @@ export function bindVideo({ client, log, toast, $ }) {
         continue;
       }
       if (token !== thumbnailEpoch || source !== original) return;
+      const tile = document.createElement('div');
+      tile.className = 'gif-frame-tile';
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'gif-frame-card';
+      button.dataset.frameIndex = String(i);
       button.setAttribute('aria-pressed', String(selectedGifFrames.has(i)));
       const startTime = i === 0 ? 0 : original.ends[i - 1] / 1000;
       button.title = 'GIF source frame ' + (i + 1) + ' at ' + fmtTime(startTime);
@@ -302,13 +325,31 @@ export function bindVideo({ client, log, toast, $ }) {
       button.append(img, meta);
       button.addEventListener('click', () => {
         if (source !== original || working || uploading || client.anyTransferring) return;
-        if (selectedGifFrames.has(i)) selectedGifFrames.delete(i);
-        else selectedGifFrames.add(i);
-        els.gifUseFrames.checked = true;
+        if (selectedGifFrames.has(i)) {
+          selectedGifFrames.delete(i);
+        } else {
+          selectedGifFrames.add(i);
+          cropEditor.setActiveFrame(i, true);
+        }
+        cropEditor.onSelectionChanged();
+        els.gifUseFrames.checked = selectedGifFrames.size > 0;
         button.setAttribute('aria-pressed', String(selectedGifFrames.has(i)));
         invalidated();
       });
-      els.gifFrameGrid.appendChild(button);
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'gif-frame-edit';
+      edit.textContent = 'Edit crop';
+      edit.disabled = !selectedGifFrames.has(i);
+      edit.addEventListener('click', () => {
+        if (source !== original || working || uploading || client.anyTransferring ||
+            !selectedGifFrames.has(i)) return;
+        cropEditor.setActiveFrame(i, true);
+        cropEditor.els.root.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+      tile.append(button, edit);
+      els.gifFrameGrid.appendChild(tile);
+      cropEditor.syncFrameCards();
     }
   }
 
@@ -322,6 +363,7 @@ export function bindVideo({ client, log, toast, $ }) {
     const file = els.input.files?.[0];
     if (!file) return;
     const request = ++generation;
+    cropEditor.clear();
     source?.close();
     source = null;
     thumbnailEpoch++;
@@ -342,6 +384,7 @@ export function bindVideo({ client, log, toast, $ }) {
       const candidate = await openVideoSource(file);
       if (request !== generation) { candidate.close(); return; }
       source = candidate;
+      cropEditor.setSource(candidate);
       els.sourceDetails.textContent = candidate.name + ' · ' +
         candidate.width + '×' + candidate.height + ' · ' +
         fmtTime(candidate.durationSeconds) +
@@ -526,8 +569,18 @@ export function bindVideo({ client, log, toast, $ }) {
   els.cancel.addEventListener('click', () => pending?.abort());
   els.download.addEventListener('click', download);
   els.upload.addEventListener('click', upload);
-  for (const el of [els.quality, els.fit, els.loop]) {
+  for (const el of [els.quality, els.loop]) {
     el.addEventListener('change', invalidated);
+  }
+  els.fit.addEventListener('change', () => {
+    invalidated();
+    void cropEditor.render();
+    cropEditor.scheduleThumbs();
+  });
+  for (const name of ['loadeddata', 'seeked', 'timeupdate']) {
+    els.player.addEventListener(name, () => {
+      if (source?.kind === 'video') void cropEditor.render();
+    });
   }
   els.seconds.addEventListener('change', setPreset);
   els.fps.addEventListener('change', invalidated);
@@ -536,6 +589,7 @@ export function bindVideo({ client, log, toast, $ }) {
   els.gifClear.addEventListener('click', () => {
     if (!source || source.kind !== 'gif' || working || uploading) return;
     selectedGifFrames.clear();
+    cropEditor.onSelectionChanged();
     els.gifFrameGrid.querySelectorAll('.gif-frame-card').forEach(
       (button) => button.setAttribute('aria-pressed', 'false'),
     );
