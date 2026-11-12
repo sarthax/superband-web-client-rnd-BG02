@@ -86,9 +86,11 @@ export function bindVideo({ client, log, toast, $ }) {
       fmtTime(s.seconds) + ' at 3 fps / ' +
       Math.round(s.seconds * BG02_VIDEO.FPS) + ' frames' +
       (s.loop ? ' · repeat selected segment' : ' · no repeat');
-    els.player.currentTime = Math.max(0, Math.min(
-      source.durationSeconds - .04, s.start,
-    ));
+    if (source.kind === 'video') {
+      els.player.currentTime = Math.max(0, Math.min(
+        source.durationSeconds - .04, s.start,
+      ));
+    }
   }
 
   function invalidated() {
