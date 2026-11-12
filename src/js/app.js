@@ -31,7 +31,7 @@ const cropper = new CircleCropEditor({
     $('#cropZoomValue').textContent = zoom + '%';
     // A JPEG/RU50 comparison must always represent the EXACT current crop.
     // Framing adjustments invalidate encoded bytes; no stale uploads.
-    if (pictureComparison || prepared?.source === 'comparison') {
+    if (pictureComparison || pictureComparing || prepared?.source === 'comparison') {
       invalidatePictureComparison('Crop changed. Reconvert to compare the current framing.');
     }
     renderPictureSize();
@@ -426,7 +426,8 @@ function applyBadgeProfile(snapshot = client.getSnapshot()) {
   $('#dialWidthOption').title = profile.fixedSize ? 'Fixed for the BG02 display' : '';
   $('#dialHeightOption').title = profile.fixedSize ? 'Fixed for the BG02 display' : '';
   $('#imageInput').accept = profile.fileAccept;
-  if (!profile.bg02) invalidatePictureComparison('BG02 comparison unavailable on this device.');
+  if (changed && !profile.bg02)
+    invalidatePictureComparison('BG02 comparison unavailable on this device.');
   $('#btnPickImage').textContent = profile.chooseLabel;
   $('#imageFormatHelp').textContent = profile.formatLabel;
   $('#imageInputHint').textContent = profile.formatHelp;
