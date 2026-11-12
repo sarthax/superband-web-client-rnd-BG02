@@ -61,3 +61,21 @@ Earlier manager code only sampled `0x20/4` during connection or **Refresh info**
 - Preserves the legacy RU50 dial type `0` when `0x20/2` reports JPEG capability, since observing an optional capability must not change pre-existing picture-transfer behavior.
 
 Verify locally with `node --test src/tests/fitpro-bg02-storage.test.mjs` from the repo root (requires Node.js), or `node --test tests/fitpro-bg02-storage.test.mjs` from `src/`. Live browser/firmware verification remains outstanding.
+
+## 2026-11-11 short advertised-name regression (hardware log)
+
+A real BG02 V35922 browser connection reported:
+
+```text
+Selected: BG02
+DIS: fw=V35922 hw=LJ733_MB_V1.5
+DEVICE_INFO_REQUEST 0x25/0x03/0x00
+Timeout waiting for DEVICE_INFO_RESPONSE
+Protocol: FitPro dial path
+```
+
+There were **no** `DIAL_INFO_REQUEST 0x20/2` or `FITPRO_20_04_STORAGE` transmissions, either at connect or after a successful Dial31 transfer. The first draft required `LJ733` in the **advertised name**, while the actual device advertises **BG02**. In addition, `looksLikeFitProBadge('BG02')` returned false and forced the Baji timeout.
+
+Fix: match the exact observed **board revision** `LJ733_MB_V1.5` with either the short **BG02** name or the longer **LJ733_V1_BadgeOK** name. Skip the irrelevant Baji probe for BG02; enable both read-only FitPro telemetry commands and the post-upload refresh. Add an identity regression test using the user's exact reported name/revision. Do not broaden the probe to all LJ733 hardware revisions.
+
+**Minimum validation after pulling**: reconnect **without uploading anything** and check the Activity log for `DIAL_INFO_REQUEST`, `FITPRO_20_04_STORAGE`, and either `BG02 0x20/4: raw=...` or `BG02 storage read unavailable`. This distinguishes command delivery from uncertain free-space semantics.
