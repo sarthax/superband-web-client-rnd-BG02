@@ -304,6 +304,37 @@
                 <p id="gifSelectedInfo" class="hint">No frames selected.</p>
                 <div id="gifFrameGrid" class="gif-frame-grid" aria-label="Original animated GIF frames"></div>
               </div>
+              <section id="videoCropEditor" class="video-crop-editor" hidden aria-label="Video and GIF framing editor">
+                <h3>Pan &amp; zoom framing</h3>
+                <p class="hint">Drag to pan, use the zoom slider, mouse wheel, or two-finger pinch. The framing shown here is used for GIF thumbnails and the actual AVI. Select a GIF frame above to edit it individually.</p>
+                <div class="video-crop-layout">
+                  <canvas id="videoCropCanvas" width="240" height="240"
+                    aria-label="240 by 240 crop. Drag to pan the selected image. Use the zoom slider to resize." tabindex="0"></canvas>
+                  <div class="video-crop-settings">
+                    <div class="row">
+                      <button type="button" id="videoCropPrev">Previous selected frame</button>
+                      <button type="button" id="videoCropNext">Next selected frame</button>
+                    </div>
+                    <p id="videoCropFrameLabel" class="hint" role="status">Shared framing</p>
+                    <div class="row">
+                      <button type="button" id="videoCropModeShared" aria-pressed="true">Edit shared crop</button>
+                      <button type="button" id="videoCropModeFrame" aria-pressed="false">Edit this frame only</button>
+                    </div>
+                    <label class="field" for="videoCropZoom">Zoom <span id="videoCropZoomValue">100%</span>
+                      <input id="videoCropZoom" type="range" min="100" max="400" step="1" value="100" />
+                    </label>
+                    <div class="row">
+                      <button type="button" id="videoCropResetFrame">Reset current crop</button>
+                      <button type="button" id="videoCropUseShared">Use shared crop for this frame</button>
+                    </div>
+                    <div class="row">
+                      <button type="button" id="videoCropApplyAll">Apply this crop to all selected frames</button>
+                      <button type="button" id="videoCropResetAll">Reset all framing</button>
+                    </div>
+                    <p id="videoCropHint" class="hint">The default shared crop applies to all frames until you override individual selections.</p>
+                  </div>
+                </div>
+              </section>
               <div class="row">
                 <button type="button" id="videoConvert" disabled>Convert &amp; measure AVI</button>
                 <button type="button" id="videoCancel" hidden>Cancel conversion</button>
