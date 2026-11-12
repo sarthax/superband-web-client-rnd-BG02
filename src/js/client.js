@@ -128,6 +128,11 @@ class BadgeSession {
       dialWidth: dial.width ?? null,
       dialHeight: dial.height ?? null,
       dialAlgorithm: dial.algorithm ?? null,
+      // From the known 0x20/2 response; does not establish file list/count.
+      dialPictureCountHint: dial.pictureNums ?? null,
+      dialThemeVersionHint: dial.themeVersion ?? null,
+      dialShortPkgLengthHint: dial.shortPkgLength ?? null,
+      storageWord0: bg02 ? this.fitProStorage?.word0 ?? null : null,
       transferring: this._transferring,
     };
   }

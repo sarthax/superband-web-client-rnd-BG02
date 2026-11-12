@@ -110,10 +110,10 @@
                 </div>
                 <div id="cropControls" class="crop-controls" hidden>
                   <label for="cropZoom">Zoom</label>
-                  <input id="cropZoom" type="range" min="100" max="400" value="100" step="1" aria-label="Photo zoom" />
+                  <input id="cropZoom" type="range" min="25" max="400" value="100" step="1" aria-label="Photo zoom" />
                   <span id="cropZoomValue" class="crop-zoom-value">100%</span>
                   <button type="button" id="cropReset">Reset</button>
-                  <p class="hint crop-tip">Drag the photo to move it. Use the slider, scroll wheel, or pinch to zoom.</p>
+                  <p class="hint crop-tip">Drag the photo to move it. Use the slider (25–400%), scroll wheel, or pinch to zoom. Zooming out may show black margins.</p>
                 </div>
                 <div class="row">
                   <input class="file-input" id="imageInput" type="file" accept="image/*,.ru50" />
@@ -147,6 +147,16 @@
                 ><input type="checkbox" id="allocMedia" checked /> Allocate media ID</label
               >
               <p class="lead" id="imageMeta">No image selected.</p>
+              <div id="pictureSizePreview" class="picture-size-preview" hidden>
+                <h3>Picture size &amp; storage</h3>
+                <div class="picture-size-grid">
+                  <div><span>Source picture</span><strong id="pictureSourceSize">—</strong></div>
+                  <div><span>Badge picture</span><strong id="pictureEncodedSize">—</strong></div>
+                  <div><span>Estimated allocation</span><strong id="pictureAllocation">—</strong></div>
+                  <div><span>Free on badge</span><strong id="pictureFreeSpace">—</strong></div>
+                </div>
+                <p id="pictureSpaceHint" class="hint">File size is calculated from the encoded format; flash allocation is estimated.</p>
+              </div>
               <p class="hint" id="imageInputHint">Connect a badge to see supported image formats.</p>
               <p class="hint" id="pushStatus" role="status" aria-live="polite">Connect your badge, choose a photo, adjust the crop, then upload.</p>
               <div class="progress" id="pushProgress" role="progressbar" aria-label="Picture upload" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i id="pushBar"></i></div>
@@ -218,6 +228,22 @@
                 <div class="empty">Connect and refresh to load media.</div>
               </div>
             </div>
+          </section>
+          <section id="bg02LibrarySection" class="section bg02-library" hidden>
+            <h2>BG02 media diagnostics <small>Read-only experiment</small></h2>
+            <p class="lead">The legacy Baji media-list/delete commands do not apply to FitPro/Dial31. This panel reads only BG02 commands already observed in the SuperBand app.</p>
+            <div class="row">
+              <button type="button" id="btnBg02LibraryInspect" disabled>Read badge media metadata</button>
+              <button type="button" id="btnBg02LibraryExport" disabled>Export diagnostic JSON</button>
+            </div>
+            <div class="picture-size-grid">
+              <div><span>Free media storage</span><strong id="bg02LibraryFree">—</strong></div>
+              <div><span>Dial-info count field</span><strong id="bg02LibraryCount">—</strong></div>
+              <div><span>Dial algorithm</span><strong id="bg02LibraryAlgorithm">—</strong></div>
+              <div><span>Known media listing</span><strong>Not decoded</strong></div>
+            </div>
+            <p id="bg02LibraryStatus" role="status" class="hint">Connect BG02 V1.5 to read dial metadata and free storage. No deletion or formatting is available.</p>
+            <p class="hint">The count byte is experimental and may not represent installed pictures. A real device-file listing and safe deletion command still require protocol evidence from SuperBand.</p>
           </section>
         </div>
       </div>
