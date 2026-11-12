@@ -5,6 +5,7 @@ import {
   muxBg02MjpegAvi,
   inspectBg02MjpegAvi,
   extractBg02AviFrame,
+  extractBg02AviFrames,
   estimateVideoAllocation,
 } from '../js/video-avi.js';
 
@@ -100,4 +101,19 @@ test('reject unsupported fractional rates and overlong AVI at low fps', () => {
   assert.throws(() => muxBg02MjpegAvi([fakeJpeg], { fps: 0.75 }));
   assert.throws(() => muxBg02MjpegAvi([fakeJpeg], { fps: 12 }));
   assert.throws(() => muxBg02MjpegAvi(Array(16).fill(fakeJpeg), { fps: 0.5 }));
+});
+
+test('comparison preview reads exact JPEG byte arrays from the final AVI', () => {
+  const one = Uint8Array.from(fakeJpeg);
+  const two = Uint8Array.from(fakeJpeg);
+  two[10] = 0x22;
+  const three = Uint8Array.from(fakeJpeg);
+  three[10] = 0x33;
+  const avi = muxBg02MjpegAvi([one, two, three], { fps: 1 });
+  const extracted = extractBg02AviFrames(avi);
+  assert.equal(extracted.length, 3);
+  assert.deepEqual(extracted.map(frame => frame[10]), [0x11, 0x22, 0x33]);
+  assert.deepEqual([...extracted[2]], [...extractBg02AviFrame(avi, 2)]);
+  extracted[0][10] = 0x44;
+  assert.equal(extractBg02AviFrame(avi, 0)[10], 0x11, 'preview may not mutate upload AVI');
 });
