@@ -63,3 +63,51 @@
 }
 .video-section .video-exceeds { color: var(--rose); }
 .video-section #videoTransferWarning { color: var(--amber); }
+
+/* Paged GIF storyboard: show frames without loading every GIF frame into DOM. */
+.video-section .gif-frame-picker {
+  display: grid;
+  gap: .6rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: .8rem;
+}
+.video-section .gif-frame-picker[hidden] { display: none; }
+.video-section .gif-frame-picker h3 { margin: 0; font-size: .96rem; }
+.video-section .gif-frame-controls { align-items: center; }
+.video-section .gif-frame-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: .55rem;
+  max-height: 380px;
+  overflow-y: auto;
+  padding: .25rem;
+}
+.video-section .gif-frame-card {
+  min-width: 0;
+  padding: .4rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, .2);
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: .3rem;
+  text-align: center;
+}
+.video-section .gif-frame-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: #000;
+  border-radius: 6px;
+}
+.video-section .gif-frame-card span { font-size: .7rem; }
+.video-section .gif-frame-card[aria-pressed="true"] {
+  border-color: var(--lime);
+  outline: 2px solid var(--lime);
+  background: rgba(210, 255, 77, .12);
+}
+.video-section .gif-frame-card:focus-visible { outline: 3px solid var(--mint); }
+.video-section .gif-frame-card:disabled { cursor: not-allowed; opacity: .65; }
