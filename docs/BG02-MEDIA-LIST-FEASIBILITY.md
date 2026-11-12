@@ -97,3 +97,57 @@ installed-file inventory.
 
 This branch does not implement deletion, file retrieval, firmware writes,
 or any unverified RCSP command.
+
+## Next slice: opt-in RCSP identity-only request (stacked PR)
+
+User's corrected live GATT output confirms:
+- `AE01`: **writeWithoutResponse**
+- `AE02`: **notify**
+- `AE00` and FitPro UART are both exposed.
+
+This completes the **GATT transport capability** check, but is not evidence
+of RCSP authentication, target-info support, or an installed-file list.
+
+**Critical protocol correction:** The older `src/js/jieli-ota.js`
+`buildRcspFrame` helper arranges length/sequence/opcode in an incompatible
+order. Do **not** reuse that helper for this probe or invoke `runJieliOta`.
+JieLi's documented RCSP envelope is:
+
+```
+FE DC BA | flags(1) | opcode(1) | BE16 bodyLen | body | EF
+```
+
+Request body starts with **sequence**; a response body starts with
+**status, sequence**. The new isolated
+`src/js/bg02-rcsp-target-info.js` implements that envelope only for
+the documented, read-only `GET_TARGET_INFO` opcode `0x03`.
+A common target-info parameter from published RCSP badge traces is
+`FF FF FF FF 00`, prefixed by the sequence number. The one request is:
+
+```
+FE DC BA C0 03 00 06 00 FF FF FF FF 00 EF
+```
+
+### Manual test
+
+1. Connect known BG02 V1.5; run **Check file-list interface**.
+2. Only if `AE00 transport candidate` appears, click
+   **Read RCSP target identity (one request)** and approve its confirmation.
+3. The browser starts `AE02` notifications, sends the single frame above
+   via `AE01.writeValueWithoutResponse`, and waits at most five seconds.
+   It matches opcode, direction and sequence, reassembles fragmented
+   notifications, and removes its listener/subscription afterward.
+4. Record the status message: **response received (status/length)**,
+   **timeout**, or **Bluetooth error**. The raw payload is deliberately not
+   logged/exported because it might include per-device identifiers.
+5. If a response arrives, the RCSP **identity request** is demonstrated.
+   It still does not establish auth success or file browse. If it times out,
+   auth or unsupported firmware remain possible. No automatic second request.
+
+**No** firmware update operations, file-list request, storage enumeration,
+unknown probing, deletion, formatting, or authentication bypass is performed.
+
+Vendor references:
+- https://doc.zh-jieli.com/SDKWiki/master/Jieli-Tech/WeChat-Mini-Program-OTA/3-bluetooth/2-ble-data-handler.html
+- https://github.com/jumpingmushroom/e87_badge/blob/main/docs/protocol.md
+- https://doc.zh-jieli.com/SDKWiki/master/Jieli-Tech/fw-AC63_BT_SDK/9-third-party-integrations/9.1-jl-rcsp.html
