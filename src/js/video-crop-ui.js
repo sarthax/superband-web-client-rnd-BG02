@@ -96,6 +96,33 @@ export class VideoCropEditor {
     };
   }
 
+  /** Restore a validated source's crop settings (never uploads or edits media). */
+  restore(saved) {
+    if (!this.source) return;
+    if (!saved || !saved.sharedCrop || !Array.isArray(saved.frameCropOverrides))
+      throw new Error('Invalid saved video/GIF framing');
+    const restoreOne = (crop) => {
+      if (![crop?.zoom, crop?.offsetX, crop?.offsetY].every(Number.isFinite))
+        throw new Error('Invalid saved frame crop');
+      return clampVideoCrop(crop, this.source.width, this.source.height, this.getFit());
+    };
+    this.shared = restoreOne(saved.sharedCrop);
+    this.overrides.clear();
+    for (const [index, crop] of saved.frameCropOverrides) {
+      if (this.source.kind !== 'gif') break;
+      if (!Number.isInteger(index) || index < 0 || index >= this.source.ends.length)
+        throw new Error('Saved GIF crop index is outside source');
+      this.overrides.set(index, restoreOne(crop));
+    }
+    this.active = 0;
+    this.mode = 'shared';
+    this.clearCachedImage();
+    this.updateControls();
+    this.syncFrameCards();
+    void this.render();
+    this.scheduleThumbs();
+  }
+
   cropForFrame(index) {
     return resolveVideoFrameCrop(this.shared, this.overrides, index);
   }
