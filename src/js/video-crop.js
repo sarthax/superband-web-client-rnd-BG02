@@ -17,6 +17,14 @@ export function defaultVideoCrop() {
   return { zoom: 1, offsetX: 0, offsetY: 0 };
 }
 
+/** Resolve the SAME shared/individual source frame crop for UI and AVI. */
+export function resolveVideoFrameCrop(shared, overrides, frameIndex) {
+  if (frameIndex == null) return shared;
+  const override = overrides instanceof Map
+    ? overrides.get(frameIndex) : overrides?.[frameIndex];
+  return override || shared;
+}
+
 export function copyVideoCrop(crop = defaultVideoCrop()) {
   return {
     zoom: Number(crop.zoom),
