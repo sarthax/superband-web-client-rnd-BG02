@@ -167,3 +167,56 @@
   .video-section .video-compare-pane figcaption { font-size: .72rem; }
   .video-section .video-compare { padding: .7rem; }
 }
+
+/* Shared + per-GIF-frame crop editor. Uses final 240px crop geometry.
+   The circular viewport matches the physical badge while JPEGs stay square. */
+.video-section .video-crop-editor {
+  display: grid;
+  gap: .7rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem;
+  background: rgba(0,0,0,.22);
+}
+.video-section .video-crop-editor[hidden] { display: none; }
+.video-section .video-crop-editor h3 { margin: 0; font-size: 1.05rem; }
+.video-section .video-crop-layout {
+  display: grid;
+  grid-template-columns: minmax(160px, 240px) minmax(0, 1fr);
+  align-items: start;
+  justify-content: center;
+  gap: 1rem;
+}
+.video-section #videoCropCanvas {
+  display: block;
+  width: min(100%,240px);
+  height: auto;
+  aspect-ratio: 1;
+  cursor: grab;
+  touch-action: none;
+  background: black;
+  border-radius: 50%;
+  border: 2px solid var(--mint);
+  user-select: none;
+}
+.video-section #videoCropCanvas:active { cursor: grabbing; }
+.video-section #videoCropCanvas:focus-visible { outline: 3px solid var(--lime); }
+.video-section .video-crop-settings {
+  display: grid;
+  gap: .65rem;
+  min-width: 0;
+}
+.video-section .video-crop-settings .field { display: grid; gap: .35rem; }
+.video-section #videoCropZoom { width: 100%; }
+.video-section .gif-frame-card[data-editing="true"] {
+  box-shadow: inset 0 0 0 2px var(--mint);
+}
+.video-section .gif-frame-card[data-override="true"]::after {
+  content: "Custom crop";
+  color: var(--mint);
+  font-size: .66rem;
+}
+@media (max-width: 570px) {
+  .video-section .video-crop-layout { grid-template-columns: minmax(0, 1fr); }
+  .video-section #videoCropCanvas { margin-inline: auto; }
+}
