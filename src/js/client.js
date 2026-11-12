@@ -48,6 +48,7 @@ import {
   dialChunkSize,
   fitproByteSum,
   looksLikeFitProBadge,
+  isKnownBg02V15Identity,
   buildLegacyProbe,
 } from './fitpro.js';
 
@@ -92,8 +93,7 @@ class BadgeSession {
 
   /** Restrict read-only new probes to the exact BG02 hardware seen in the Android trace. */
   get isKnownBg02V15() {
-    return /^LJ733_MB_V1\.5$/i.test(this.disInfo?.hardware || '') &&
-      /LJ733/i.test(this.name || '');
+    return isKnownBg02V15Identity(this.name, this.disInfo?.hardware);
   }
 
   getSnapshot() {
@@ -247,9 +247,9 @@ class BadgeSession {
 
     // BJ-1 / DG01: Baji DEVICE_INFO times out; DIAL_INFO (0x20) often drops GATT.
     // Match the Android post-connect path: legacy 0x1A probes, then FitPro dial31 for push.
-    if (looksLikeFitProBadge(this.name)) {
+    if (this.isKnownBg02V15 || looksLikeFitProBadge(this.name)) {
       this.protocolMode = 'fitpro';
-      this._log('Protocol: FitPro dial31 (GAP name heuristic — skipping Baji / dial-info probes)', 'ok');
+      this._log('Protocol: FitPro dial31 (identity-based — skipping Baji device-info)', 'ok');
       await this._fitProHandshake();
       // Unlike BJ-1, BG02 V1.5 returned dial-info and 0x20/4 in our actual
       // Android btsnoop. Never auto-probe other FitPro badge revisions.
