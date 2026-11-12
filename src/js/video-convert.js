@@ -5,7 +5,7 @@
  *
  * No MP4/WebM decoder is bundled. Unsupported formats fail with a clear error.
  */
-import { BG02_VIDEO, muxBg02MjpegAvi, inspectBg02MjpegAvi } from './video-avi.js';
+import { BG02_VIDEO, muxBg02MjpegAvi, inspectBg02MjpegAvi, extractBg02AviFrame } from './video-avi.js';
 
 export const VIDEO_QUALITIES = Object.freeze({
   low: { label: 'Low', jpegQuality: 0.30 },
@@ -44,6 +44,29 @@ export async function openVideoSource(file) {
   if (!(file instanceof File)) throw new Error('Choose a local video or animated GIF');
   if (file.size > 150 * 1024 * 1024) {
     throw new Error('Files larger than 150 MB are not supported by the browser converter');
+  }
+  // Native playback of AVI is inconsistent across browsers. A known-good
+  // SuperBand MJPEG AVI can instead be uploaded byte-for-byte as a control.
+  if (/\.avi$/i.test(file.name) || /(?:x-msvideo|avi)/i.test(file.type)) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let info;
+    try {
+      info = inspectBg02MjpegAvi(bytes);
+      if (info.seconds > BG02_VIDEO.MAX_EXPERIMENTAL_SECONDS) {
+        throw new Error('Only AVI clips up to 30s are accepted by this workbench');
+      }
+    } catch (e) {
+      throw new Error('AVI input must already be 240x240 MJPEG at 3 fps: ' + e.message);
+    }
+    const posterUrl = URL.createObjectURL(
+      new Blob([extractBg02AviFrame(bytes, 0)], { type: 'image/jpeg' }),
+    );
+    return {
+      kind: 'avi', name: file.name, width: info.width, height: info.height,
+      durationSeconds: info.seconds, aviBytes: bytes, aviInfo: info,
+      previewUrl: posterUrl,
+      close() { URL.revokeObjectURL(posterUrl); },
+    };
   }
   const gif = file.type === 'image/gif' || /\.gif$/i.test(file.name);
   if (gif) {
