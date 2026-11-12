@@ -149,6 +149,75 @@
             </div>
           </section>
 
+          <section class="section video-section" id="videoSection" hidden>
+            <h2>Video &amp; animated GIF <small class="video-experiment-tag">Experimental</small></h2>
+            <p class="lead">Trim a segment, choose encoding quality, then check the exact AVI size before upload. The badge is verified with a 5-second, 3 fps MJPEG video; longer playback has not been confirmed.</p>
+            <div class="stack">
+              <div class="row">
+                <input class="file-input" id="videoInput" type="file" accept=".gif,image/gif,video/*,.mp4,.webm,.mov,.avi" />
+                <button type="button" id="videoPick">Choose GIF or video</button>
+                <span id="videoSourceDetails" class="muted">No video selected</span>
+              </div>
+              <div class="video-source-preview">
+                <video id="videoSourcePlayer" controls muted playsinline preload="metadata" hidden></video>
+                <img id="videoSourceGif" alt="Animated GIF source preview" hidden />
+                <span class="muted" id="videoPreviewPlaceholder">Select a video or animated GIF to preview</span>
+              </div>
+              <div class="video-trimmer">
+                <div class="video-marker-row">
+                  <label for="videoStart">Start marker <span id="videoStartLabel">0.0 s</span></label>
+                  <input id="videoStart" type="range" min="0" max="1" value="0" step="0.1" disabled />
+                </div>
+                <div class="video-marker-row">
+                  <label for="videoEnd">Stop marker <span id="videoEndLabel">0.0 s</span></label>
+                  <input id="videoEnd" type="range" min="0" max="1" value="1" step="0.1" disabled />
+                </div>
+                <div class="row">
+                  <label class="field">Clip length
+                    <select id="videoSeconds">
+                      <option value="5" selected>5 seconds — verified</option>
+                      <option value="10">10 seconds — unverified</option>
+                      <option value="15">15 seconds — unverified</option>
+                      <option value="20">20 seconds — experimental</option>
+                      <option value="30">30 seconds — experimental</option>
+                    </select>
+                  </label>
+                  <label class="field">Encoding
+                    <select id="videoQuality">
+                      <option value="low">Low — smaller</option>
+                      <option value="medium" selected>Medium</option>
+                      <option value="high">High — larger</option>
+                    </select>
+                  </label>
+                  <label class="field">Crop
+                    <select id="videoFit">
+                      <option value="cover" selected>Fill 240×240</option>
+                      <option value="contain">Fit with black bars</option>
+                    </select>
+                  </label>
+                </div>
+                <label class="check"><input id="videoLoop" type="checkbox" checked /> Loop selected source segment to fill clip length</label>
+                <p id="videoRangeInfo" class="hint">Choose a source, then adjust the markers.</p>
+              </div>
+              <div class="row">
+                <button type="button" id="videoConvert" disabled>Convert &amp; measure AVI</button>
+                <button type="button" id="videoCancel" hidden>Cancel conversion</button>
+                <button type="button" id="videoDownload" disabled>Download AVI</button>
+                <button type="button" class="primary" id="videoUpload" disabled>Upload video</button>
+              </div>
+              <div class="video-output-preview">
+                <img id="videoOutputFrame" alt="First frame of encoded AVI" hidden />
+                <div>
+                  <p id="videoExactSize" class="video-size">Not converted yet</p>
+                  <p id="videoSpaceInfo" class="hint">Actual video bytes and an estimated storage allocation appear after conversion.</p>
+                  <p id="videoTransferWarning" class="hint">No audio. Clips longer than 5 seconds could be shortened or rejected by the badge.</p>
+                </div>
+              </div>
+              <p id="videoStatus" class="hint" role="status" aria-live="polite">Conversion runs locally in your browser. The photo uploader is unchanged.</p>
+              <div class="progress" id="videoProgress" role="progressbar" aria-label="Video conversion or upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i id="videoBar"></i></div>
+            </div>
+          </section>
+
           <section class="section device-section">
             <h2>Device details</h2>
             <p class="lead">
