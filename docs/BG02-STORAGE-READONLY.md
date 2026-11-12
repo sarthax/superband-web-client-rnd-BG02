@@ -49,3 +49,15 @@ The manager displays the second word with a `~` prefix and a tooltip, logs both 
 4. Investigate orphaned allocations / media cleanup separately. **Never send generic Baji delete or raw flash erase to this FitPro badge.**
 
 No current source has established a BG02-safe `format` / `delete-all` command.
+
+## Refresh behavior added after first hardware feedback
+
+Earlier manager code only sampled `0x20/4` during connection or **Refresh info**; photo uploads did not request a new reading, so the displayed number stayed stale. The manager now:
+
+- Performs one best-effort read roughly 800 ms **after** an acknowledged Dial31 upload. Its failure does **not** turn a successful transfer into a failure.
+- Logs `before`, `after`, and `change` (bytes) when a previous reading exists. A zero delta may mean no visible allocation change, a cached counter, or a wrong interpretation of the provisional field; it must not be treated as proof of a full filesystem.
+- Offers **Refresh storage** as a separate read-only button under Device details. It is available only on the verified `LJ733_MB_V1.5` identity and while no transfer is underway.
+- Displays **Capacity: Not reported**: the 8-byte `0x20/4` response does not establish total media capacity. Do not hardcode 500 KB from marketing/UI screenshots.
+- Preserves the legacy RU50 dial type `0` when `0x20/2` reports JPEG capability, since observing an optional capability must not change pre-existing picture-transfer behavior.
+
+Verify locally with `node --test src/tests/fitpro-bg02-storage.test.mjs` from the repo root (requires Node.js), or `node --test tests/fitpro-bg02-storage.test.mjs` from `src/`. Live browser/firmware verification remains outstanding.
