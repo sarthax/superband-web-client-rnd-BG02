@@ -21,7 +21,13 @@ export function resolveBadgeProfile(snapshot = {}) {
   const width = bg02 ? 240 : (reportedWidth ?? FALLBACK_SIZE.width);
   const height = bg02 ? 240 : (reportedHeight ?? FALLBACK_SIZE.height);
   const jpeg = protocolMode === 'baji' || Number(snapshot?.dialAlgorithm) === 4;
-  const format = bg02 ? 'ru50' : jpeg ? 'jpeg444' : 'rgb565';
+  const bg02JpegQualified = bg02 && protocolMode === 'fitpro' &&
+    Number(snapshot?.dialAlgorithm) === 4 &&
+    isKnownBg02V15Identity(snapshot?.name, snapshot?.hardware);
+  // Known BG02 V1.5 hardware has now displayed JPEG 4:4:4 successfully.
+  // Leave RU50 as the conservative fallback for incomplete identities.
+  const format = bg02 ? (bg02JpegQualified ? 'jpeg444' : 'ru50')
+    : jpeg ? 'jpeg444' : 'rgb565';
 
   return {
     id: bg02 ? 'bg02' : (protocolMode === 'baji' ? 'baji' : 'fitpro-generic'),
@@ -29,10 +35,7 @@ export function resolveBadgeProfile(snapshot = {}) {
     width,
     height,
     format,
-    jpegExperimentSupported: bg02 &&
-      protocolMode === 'fitpro' &&
-      Number(snapshot?.dialAlgorithm) === 4 &&
-      isKnownBg02V15Identity(snapshot?.name, snapshot?.hardware),
+    jpegExperimentSupported: bg02JpegQualified,
     fixedSize: bg02,
     hasReportedSize: reportedWidth !== null && reportedHeight !== null,
     showMediaLibrary: protocolMode === 'baji',
@@ -43,7 +46,7 @@ export function resolveBadgeProfile(snapshot = {}) {
       ? 'BG02 · round 240×240 picture'
       : jpeg ? 'JPEG 4:4:4' : 'RGB565',
     formatHelp: bg02
-      ? 'Choose a photo, drag to move it inside the circle, zoom as needed, then upload. The picture is resized and converted automatically.'
+      ? 'Choose a photo, drag to crop, then Optimize picture to compare JPEG and RU50. JPEG is the preferred format on confirmed BG02 V1.5.'
       : jpeg
         ? 'Images are cropped to the selected size and encoded as JPEG 4:4:4 before uploading.'
         : 'Images are cropped to the selected size and encoded as RGB565. For badges without reported dimensions, 360×360 is only a fallback.',
