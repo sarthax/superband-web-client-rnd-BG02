@@ -102,3 +102,41 @@ Do not use a successful BLE ACK as proof that playback duration is correct.
 
 Added targeted test coverage for all four AVI header timebases, 0.5fps clipping,
 1fps GIF frame selection/holds, and the no-automatic-repeat rule.
+
+## Hardware findings and browser preview update — 2026-11-11
+
+User reports **two successful 1fps playback samples** on the BG02: the badge
+honors the intended AVI header timing. A three-frame, **1fps / 3-second** AVI
+encoded at **13.4 KB** compared with an approximate previous 60KB output from
+the fixed-rate workflow. Those figures are user-observed, not a controlled
+same-quality benchmark; the difference is nevertheless promising.
+
+Status by frame rate:
+- 3fps: supported in original recovered SuperBand AVI.
+- **1fps: playback timing confirmed by user for two samples**.
+- 2fps: not independently playback-confirmed.
+- 0.5fps: **not tested** on the device.
+
+Do not extrapolate to 0.5fps without a separate device check.
+
+### Side-by-side comparison preview
+
+After conversion, the Video & GIF tab now displays two synchronized 240x240
+round previews: **sampled source frames before JPEG compression** and
+**MJPEG frames extracted from the exact generated AVI bytes**.
+Playback, pause, previous/next frame, and a shared scrub timeline all follow
+the AVI's declared fps, including 1fps and experimental 0.5fps. This allows
+offline quality/timing comparison before consuming any badge storage.
+
+The browser does not need native AVI playback: we parse RIFF/movi frame
+chunks, decode their JPEG payloads with `createImageBitmap`, and synchronize
+display with pre-compression reference images retained during conversion.
+For imported unmodified AVI, the left and right panes necessarily show the
+same encoded pixels since no original source frames are available.
+This is a **browser simulation of header timing**, not proof that each
+unverified frame rate works on the badge.
+
+The actual AVI bytes and the Bluetooth sender are unchanged by the preview.
+Structural tests ensure the extraction preserves frame order and cannot mutate
+the upload buffer. GIF browser decode and the visual preview controls still
+require a manual browser check.
