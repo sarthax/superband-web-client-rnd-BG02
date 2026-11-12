@@ -7,14 +7,18 @@
  */
 export const CROP_PREVIEW_SIZE = 320;
 export const BG02_OUTPUT_SIZE = 240;
+export const PHOTO_MIN_ZOOM = 0.25;
+export const PHOTO_MAX_ZOOM = 4;
 
 export function cropGeometry(imageWidth,imageHeight,zoom=1,offsetX=0,offsetY=0,size=CROP_PREVIEW_SIZE) {
   if (!imageWidth || !imageHeight) throw new Error('Invalid source image dimensions');
-  const factor = Math.max(1,Math.min(4,Number(zoom)||1));
+  const factor = Math.max(PHOTO_MIN_ZOOM,Math.min(PHOTO_MAX_ZOOM,Number(zoom)||1));
   const scale = Math.max(size/imageWidth,size/imageHeight)*factor;
   const drawWidth=imageWidth*scale, drawHeight=imageHeight*scale;
-  const limitX=Math.max(0,(drawWidth-size)/2);
-  const limitY=Math.max(0,(drawHeight-size)/2);
+  // A zoom-out below cover intentionally reveals black margins.
+  // Allow repositioning within either an overhanging crop or the letterbox.
+  const limitX=Math.abs(drawWidth-size)/2;
+  const limitY=Math.abs(drawHeight-size)/2;
   const x=Math.max(-limitX,Math.min(limitX,offsetX));
   const y=Math.max(-limitY,Math.min(limitY,offsetY));
   return {
@@ -54,7 +58,8 @@ export class CircleCropEditor {
     canvas.addEventListener('wheel',event=>{
       if(!this.image)return;
       event.preventDefault();
-      this.zoom=Math.max(1,Math.min(4,this.zoom*(event.deltaY<0?1.12:1/1.12)));
+      this.zoom=Math.max(PHOTO_MIN_ZOOM,
+        Math.min(PHOTO_MAX_ZOOM,this.zoom*(event.deltaY<0?1.12:1/1.12)));
       this.zoomInput.value=String(Math.round(this.zoom*100));
       this.render();
     },{passive:false});
@@ -155,7 +160,8 @@ export class CircleCropEditor {
     if(this.pointers.size>=2) {
       const distance=this.pointerDistance();
       if(this.lastPinchDistance && distance) {
-        this.zoom=Math.max(1,Math.min(4,this.zoom*distance/this.lastPinchDistance));
+        this.zoom=Math.max(PHOTO_MIN_ZOOM,
+          Math.min(PHOTO_MAX_ZOOM,this.zoom*distance/this.lastPinchDistance));
         this.zoomInput.value=String(Math.round(this.zoom*100));
       }
       this.lastPinchDistance=distance;
