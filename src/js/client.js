@@ -30,6 +30,9 @@ import {
   FitPro,
   buildDialInfoRequest,
   buildDialStatusRequest,
+  buildFitProStorageRequest,
+  parseFitProStorageResponse,
+  isFitProStoragePacket,
   buildDialStart,
   buildDialStartPayload,
   buildDialDataChunk,
@@ -67,6 +70,7 @@ class BadgeSession {
     /** @type {'unknown'|'baji'|'fitpro'} */
     this.protocolMode = 'unknown';
     this.dialInfo = null;
+    this.fitProStorage = null;
     this._fileId = 1n;
     this._waiters = new Map();
     this._transferring = false;
@@ -85,15 +89,22 @@ class BadgeSession {
     return this.protocolMode === 'baji';
   }
 
+  /** Restrict read-only new probes to the exact BG02 hardware seen in the Android trace. */
+  get isKnownBg02V15() {
+    return /^LJ733_MB_V1\\.5$/i.test(this.disInfo?.hardware || '') &&
+      /LJ733/i.test(this.name || '');
+  }
+
   getSnapshot() {
     const dis = this.disInfo || {};
     const baji = this.deviceInfo || {};
     const dial = this.dialInfo || {};
+    const bg02 = this.isKnownBg02V15;
     return {
       sessionId: this.id,
       connected: this.connected,
       name: this.name,
-      model: dis.model || baji.name || dial.mchModel || null,
+      model: dis.model || baji.name || (bg02 ? 'BG02 (LJ733)' : dial.mainModel || dial.mchModel || null),
       firmware: dis.firmware || baji.deviceVersion || null,
       hardware: dis.hardware || null,
       software: dis.software || null,
@@ -104,8 +115,10 @@ class BadgeSession {
         (this.protocolMode === 'fitpro' ? 'FitPro dial31' : this.protocolMode === 'baji' ? 'Baji' : null),
       protocolMode: this.protocolMode,
       battery: this.battery,
-      freeStorage: baji.freeStorage ?? null,
+      freeStorage: baji.freeStorage ?? (bg02 ? this.fitProStorage?.reportedBytes : null) ?? null,
       storageCapacity: baji.storageCapacity ?? null,
+      freeStorageSource: baji.freeStorage != null ? 'baji' :
+        bg02 && this.fitProStorage ? 'fitpro-0x20/4-provisional' : null,
       maxFileSize: baji.maxFileSize ?? null,
       features: baji.features || null,
       mediaId: this.mediaId,
@@ -197,6 +210,7 @@ class BadgeSession {
           this.mediaId = null;
           this.mediaList = null;
           this.dialInfo = null;
+          this.fitProStorage = null;
           this.protocolMode = 'unknown';
           // Only drop the hub entry if this object still owns that id
           // (avoids wiping an existing session when a duplicate picker result is discarded).
@@ -235,6 +249,22 @@ class BadgeSession {
       this.protocolMode = 'fitpro';
       this._log('Protocol: FitPro dial31 (GAP name heuristic — skipping Baji / dial-info probes)', 'ok');
       await this._fitProHandshake();
+      // Unlike BJ-1, BG02 V1.5 returned dial-info and 0x20/4 in our actual
+      // Android btsnoop. Never auto-probe other FitPro badge revisions.
+      if (this.isKnownBg02V15 && this.connected) {
+        try {
+          await this.refreshDialInfo({ timeoutMs: 5000 });
+        } catch (e) {
+          this._log(`BG02 dial-info read unavailable: ${e.message}`, 'warn');
+        }
+        if (this.connected) {
+          try {
+            await this.refreshFitProStorage({ timeoutMs: 5000 });
+          } catch (e) {
+            this._log(`BG02 storage read unavailable: ${e.message}`, 'warn');
+          }
+        }
+      }
       this.hub._emitSnapshot();
       return this.getSnapshot();
     }
@@ -360,16 +390,47 @@ class BadgeSession {
   }
 
   async refreshDialInfo({ timeoutMs = 8000 } = {}) {
-    await this.write(buildDialInfoRequest(), 'DIAL_INFO_REQUEST');
-    const pkt = await this._waitFor((p) => isFitProDialInfoPacket(p), {
+    // Register the waiter first; on BG02 the app receives this response quickly.
+    const waiting = this._waitFor((p) => isFitProDialInfoPacket(p), {
       timeoutMs,
       label: 'DIAL_INFO_RESPONSE',
     });
+    try {
+      await this.write(buildDialInfoRequest(), 'DIAL_INFO_REQUEST');
+    } catch (e) {
+      waiting.catch(() => {});
+      throw e;
+    }
+    const pkt = await waiting;
     const info = parseDialInfo(pkt.payload);
     if (!info) throw new Error('Could not parse dial info');
     this.dialInfo = info;
     this._log(`Dial info: ${describeFitProDial(info)}`, 'ok');
     this._emit('dialinfo', { info });
+    this.hub._emitSnapshot();
+    return info;
+  }
+
+  /** BG02-only read: FitPro 0x20/4, not the Baji DEVICE_INFO command. */
+  async refreshFitProStorage({ timeoutMs = 5000 } = {}) {
+    if (!this.isKnownBg02V15) throw new Error('BG02 V1.5 storage probe only');
+    const waiting = this._waitFor((p) => isFitProStoragePacket(p), {
+      timeoutMs,
+      label: 'FITPRO_20_04_RESPONSE',
+    });
+    try {
+      await this.write(buildFitProStorageRequest(), 'FITPRO_20_04_STORAGE');
+    } catch (e) {
+      waiting.catch(() => {});
+      throw e;
+    }
+    const pkt = await waiting;
+    const info = parseFitProStorageResponse(pkt.payload);
+    if (!info) throw new Error('Invalid BG02 0x20/4 payload (expected 8 bytes)');
+    this.fitProStorage = info;
+    const raw = Array.from(pkt.payload, (v) => v.toString(16).padStart(2, '0')).join('');
+    this._log(`BG02 0x20/4: raw=${raw} first=${info.word0} candidateFree=${info.reportedBytes} bytes`, 'info');
+    this._emit('storageinfo', { info, provisional: true, raw });
     this.hub._emitSnapshot();
     return info;
   }
@@ -887,6 +948,10 @@ export class SuperBandClient extends EventTarget {
 
   async refreshDialInfo(opts) {
     return this._requireActive().refreshDialInfo(opts);
+  }
+
+  async refreshFitProStorage(opts) {
+    return this._requireActive().refreshFitProStorage(opts);
   }
 
   async fitProHandshake() {
