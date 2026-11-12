@@ -111,3 +111,59 @@
 }
 .video-section .gif-frame-card:focus-visible { outline: 3px solid var(--mint); }
 .video-section .gif-frame-card:disabled { cursor: not-allowed; opacity: .65; }
+
+/* After-conversion comparison: exact pre-JPEG sample versus JPEG decoded
+   directly from the final AVI. No browser AVI playback support required. */
+.video-section .video-compare {
+  display: grid;
+  gap: .8rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(0,0,0,.20);
+}
+.video-section .video-compare[hidden] { display: none; }
+.video-section .video-compare h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.video-section .video-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 1rem;
+}
+.video-section .video-compare-pane {
+  display: grid;
+  justify-items: center;
+  gap: .6rem;
+  min-width: 0;
+  margin: 0;
+}
+.video-section .video-compare-pane figcaption {
+  text-align: center;
+  font-size: .8rem;
+  line-height: 1.35;
+  color: var(--muted);
+  min-height: 2.5em;
+}
+.video-section .video-compare-pane canvas {
+  display: block;
+  width: min(100%, 240px);
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #000;
+  border: 2px solid var(--line);
+}
+.video-section .video-compare-controls { display: grid; gap: .6rem; }
+.video-section #videoCompareSeek { width: 100%; }
+.video-section #videoComparePosition {
+  font-size: .78rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 500px) {
+  .video-section .video-compare-grid { gap: .5rem; }
+  .video-section .video-compare-pane figcaption { font-size: .72rem; }
+  .video-section .video-compare { padding: .7rem; }
+}
