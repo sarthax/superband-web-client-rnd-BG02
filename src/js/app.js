@@ -252,8 +252,10 @@ function renderSnapshot(snap) {
     manufacturer: dash(s.manufacturer),
     battery,
     protocol: dash(s.protocol),
-    free: fmtBig(s.freeStorage),
-    cap: fmtBig(s.storageCapacity),
+    free: s.freeStorageSource === 'fitpro-0x20/4-provisional'
+      ? `~${fmtBig(s.freeStorage)}` : fmtBig(s.freeStorage),
+    cap: s.storageProbeSupported && s.storageCapacity == null
+      ? 'Not reported' : fmtBig(s.storageCapacity),
   };
 
   for (const [key, val] of Object.entries(fields)) {
@@ -261,6 +263,13 @@ function renderSnapshot(snap) {
       el.textContent = val;
     });
   }
+
+  const storageHint = s.freeStorageSource === 'fitpro-0x20/4-provisional'
+    ? 'BG02 FitPro 0x20/4, read-only: second u32 is a candidate for free media bytes. Compare with SuperBand app.'
+    : '';
+  $$('[data-field="free"], [data-glance="free"]').forEach((el) => {
+    el.title = storageHint;
+  });
 
   const glance = {
     name: fields.name,
@@ -288,6 +297,8 @@ function updatePushChecklist() {
   const connected = client.connected;
   const imageReady = !!prepared;
   const idle = !transferring && !client.anyTransferring;
+  const storageProbe = client.getSnapshot()?.storageProbeSupported;
+  $('#btnRefreshStorage').disabled = !connected || !idle || !storageProbe;
   const map = { conn: connected, image: imageReady, idle };
   for (const [key, ok] of Object.entries(map)) {
     const li = document.querySelector(`[data-check="${key}"]`);
@@ -677,6 +688,21 @@ function bind() {
       })
       .catch((e) => toast(e.message, 'err')),
   );
+  $('#btnRefreshStorage').addEventListener('click', async () => {
+    try {
+      if (!client.connected || client.anyTransferring) {
+        throw new Error('Connect a badge and finish any upload first');
+      }
+      $('#btnRefreshStorage').disabled = true;
+      const info = await client.refreshFitProStorage({ timeoutMs: 5000 });
+      toast(`BG02 storage candidate: ~${formatBytes(info.reportedBytes)}`, 'ok');
+    } catch (e) {
+      toast(e.message, 'err');
+      log({ msg: `Storage refresh: ${e.message}`, level: 'warn' });
+    } finally {
+      renderSnapshot();
+    }
+  });
   $('#btnPair').addEventListener('click', () =>
     client.pair().catch((e) => toast(e.message, 'err')),
   );

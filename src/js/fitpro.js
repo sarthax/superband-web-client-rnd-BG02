@@ -20,6 +20,7 @@ export const FitPro = {
   InfoCmd: {
     STATUS: 1,
     INFO: 2,
+    STORAGE: 4, // BG02: 0x20/4 reply carries two BE32 words; second varies with media usage
   },
   LegacyCmd: {
     /** zl.java post-connect: D(10), D(12), D(28) */
@@ -51,7 +52,21 @@ export const FitPro = {
 export function looksLikeFitProBadge(name) {
   if (!name) return false;
   const n = String(name);
-  return /^(BJ|DG)/i.test(n) || /BadgeOK|SuperBand|_V\d/i.test(n);
+  // BG02 advertises a short GAP name on production V35922; not just
+  // LJ733_V1_BadgeOK. Skipping this led to a pointless Baji request timeout.
+  return /^(BJ|DG)/i.test(n) ||
+    /^BG02(?:$|[_-])/i.test(n) ||
+    /BadgeOK|SuperBand|_V\d/i.test(n);
+}
+
+/** Device identity gate for BG02-only read-only probes.
+ * The actual badge may advertise either BG02 or LJ733_V1_BadgeOK.
+ * Keep both name AND board revision checks; do not query unrelated BJ/DG.
+ */
+export function isKnownBg02V15Identity(name, hardware) {
+  return /^LJ733_MB_V1\.5$/i.test(String(hardware || '').trim()) &&
+    (/^BG02(?:$|[_-])/i.test(String(name || '').trim()) ||
+     /^LJ733(?:$|_)/i.test(String(name || '').trim()));
 }
 
 function putU16BE(out, offset, value) {
@@ -169,6 +184,31 @@ export function buildDialStatusRequest() {
   return buildFitProFrame(FitPro.DIAL_INFO_MODULE, FitPro.InfoCmd.STATUS);
 }
 
+/** Read-only BG02 FitPro 0x20/4 query, observed in SuperBand Android HCI capture. */
+export function buildFitProStorageRequest() {
+  return buildFitProFrame(FitPro.DIAL_INFO_MODULE, FitPro.InfoCmd.STORAGE);
+}
+
+/**
+ * Observed BG02 response: 8-byte payload, two big-endian uint32 words.
+ * The second word fell from 204800 to 163840 between Android sessions.
+ * It is a strong *candidate* for free media bytes, not overall flash capacity.
+ */
+export function parseFitProStorageResponse(payload) {
+  if (!payload || payload.length !== 8) return null;
+  return {
+    word0: getU32BE(payload, 0),
+    reportedBytes: getU32BE(payload, 4),
+  };
+}
+
+export function isFitProStoragePacket(pkt) {
+  return !!pkt &&
+    (pkt.dialect === 'fitpro' || pkt.legacy) &&
+    (pkt.moduleId === FitPro.DIAL_INFO_MODULE || pkt.moduleKey === FitPro.DIAL_INFO_MODULE) &&
+    (pkt.commandId === FitPro.InfoCmd.STORAGE || pkt.command === FitPro.InfoCmd.STORAGE);
+}
+
 /** Short legacy probe: CD 00 05 1A 01 {cmd} 00 00 */
 export function buildLegacyProbe(cmd) {
   return buildFitProFrame(FitPro.LEGACY_MODULE, cmd);
@@ -193,6 +233,12 @@ export function buildDialFinish(fileBlob) {
   const sumBytes = new Uint8Array(4);
   putU32BE(sumBytes, 0, fitproByteSum(fileBlob));
   return buildFitProFrame(FitPro.DIAL_MODULE, FitPro.DialCmd.FINISH, sumBytes);
+}
+
+/** Keep RU50's existing dial type when a read-only dial-info probe reports JPEG. */
+export function chooseFitProDialType(info, isRu50 = false) {
+  if (isRu50) return 0;
+  return info?.dialType ?? (info?.algorithm === 4 ? 2 : 0);
 }
 
 /**

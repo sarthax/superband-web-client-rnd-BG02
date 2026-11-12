@@ -1,0 +1,78 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  buildFitProStorageRequest,
+  parseFitProStorageResponse,
+  isFitProStoragePacket,
+  parseDialInfo,
+  chooseFitProDialType,
+  looksLikeFitProBadge,
+  isKnownBg02V15Identity,
+} from '../js/fitpro.js';
+import { parsePacket } from '../js/protocol.js';
+
+test('BG02 storage request matches the Android HCI write', () => {
+  assert.deepEqual(
+    [...buildFitProStorageRequest()],
+    [0xcd, 0, 5, 0x20, 1, 4, 0, 0],
+  );
+});
+
+test('BG02 0x20/4 response decodes the changing second big-endian word', () => {
+  const before = Uint8Array.from([0xcd, 0, 13, 0x20, 1, 4, 0, 8,
+    0, 0, 0, 0, 0, 3, 0x20, 0]);
+  const after = Uint8Array.from([0xcd, 0, 13, 0x20, 1, 4, 0, 8,
+    0, 0, 0, 0, 0, 2, 0x80, 0]);
+  const a = parsePacket(before);
+  const b = parsePacket(after);
+  assert.equal(isFitProStoragePacket(a), true);
+  assert.equal(isFitProStoragePacket(b), true);
+  assert.deepEqual(parseFitProStorageResponse(a.payload), {
+    word0: 0,
+    reportedBytes: 204800,
+  });
+  assert.deepEqual(parseFitProStorageResponse(b.payload), {
+    word0: 0,
+    reportedBytes: 163840,
+  });
+  assert.equal(204800 - 163840, 40960);
+});
+
+test('BG02 storage decoder rejects invalid/short payloads', () => {
+  assert.equal(parseFitProStorageResponse(new Uint8Array(0)), null);
+  assert.equal(parseFitProStorageResponse(new Uint8Array(4)), null);
+});
+
+test('BG02 dial-info fixture identifies LJ733 and K66 without guessing', () => {
+  const payload = Uint8Array.from([
+    0x01,0x00,0x00,0xf0,0x00,0xf0,0x03,0x4b,0x36,0x36,
+    0x05,0x4c,0x4a,0x37,0x33,0x33,0x07,0x04,0xff,0xfe,
+    0x01,0x05,0x4a,0x51,0x30,0x30,0x31,0x00,0x00,0x09,
+    0x13,0x88,
+  ]);
+  const info = parseDialInfo(payload);
+  assert.equal(info.width, 240);
+  assert.equal(info.height, 240);
+  assert.equal(info.mchModel, 'K66');
+  assert.equal(info.mainModel, 'LJ733');
+  assert.equal(info.algorithm, 4);
+  assert.equal(info.shortPkgLength, 5000);
+});
+
+test('reading JPEG capability must not change BG02 RU50 upload dial type', () => {
+  const jpegInfo = { algorithm: 4, dialType: 2 };
+  assert.equal(chooseFitProDialType(jpegInfo, true), 0);
+  assert.equal(chooseFitProDialType(jpegInfo, false), 2);
+  assert.equal(chooseFitProDialType(null, false), 0);
+});
+
+test('actual BG02 device name and V1.5 revision qualify for FitPro storage reads', () => {
+  // 2026-11-11 19:01 browser log: Selected: BG02; DIS: hw=LJ733_MB_V1.5
+  assert.equal(looksLikeFitProBadge('BG02'), true);
+  assert.equal(isKnownBg02V15Identity('BG02', 'LJ733_MB_V1.5'), true);
+  assert.equal(isKnownBg02V15Identity('LJ733_V1_BadgeOK', 'LJ733_MB_V1.5'), true);
+  assert.equal(isKnownBg02V15Identity('DG01', 'LJ733_MB_V1.5'), false);
+  assert.equal(isKnownBg02V15Identity('BG02', 'LJ733_MB_V1.1'), false);
+  assert.equal(isKnownBg02V15Identity('BG02', null), false);
+  assert.equal(isKnownBg02V15Identity(null, 'LJ733_MB_V1.5'), false);
+});
