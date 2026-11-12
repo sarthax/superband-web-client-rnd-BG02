@@ -19,5 +19,5 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - name: Query eight historically documented firmware-version keys (metadata only)
+      - name: Query nine evidence-backed firmware-version keys (including BG02 V35509) (metadata only)
         run: python3 tools/bg02_catalog_audit.py
