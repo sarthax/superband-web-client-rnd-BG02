@@ -140,3 +140,48 @@ The actual AVI bytes and the Bluetooth sender are unchanged by the preview.
 Structural tests ensure the extraction preserves frame order and cannot mutate
 the upload buffer. GIF browser decode and the visual preview controls still
 require a manual browser check.
+
+## Interactive GIF/video framing editor
+
+Rectangular GIFs no longer have to use a fixed center crop. The Video & GIF
+tab has a **240×240 circular crop preview** with drag-to-pan, wheel/slider
+zoom (100–400%), two-finger pinch, and arrow-key panning. The underlying AVI
+frames remain square MJPEG images, just as before; the circle is a UI mask
+matching the round BG02 badge.
+
+Editing uses a single source-coordinate-independent **240px crop transform**,
+in the same spirit as the existing photo cropper. It supports both the
+existing **Fill** (cover) and **Fit with black bars** (contain) choices.
+
+There are two levels of framing:
+
+- **Shared crop** (default): the fallback for every GIF frame, and the only
+  cropping mode for ordinary MP4/WebM video trims.
+- **Individual GIF frame crop**: selecting a frame from the paginated GIF
+  thumbnails makes it active for crop editing. Use its separate **Edit crop**
+  button to open a frame that is already selected without deselecting it.
+  Adjustments to this frame create an override keyed by its original GIF
+  frame index, independent of other selected frames.
+
+The crop editor includes Previous/Next selected frame, zoom, Reset current
+crop, Use shared crop for this frame (discard override), Apply to selected
+frames (copy the current framing into each selected frame's override),
+Apply to every GIF frame (set the current framing as the new shared crop and
+clear all overrides), and Reset all framing.
+
+**Consistency:** All paginated GIF thumbnails are generated with the same
+crop math, source frame and fit mode as the AVI converter. During AVI
+conversion, each sampled original GIF frame uses its own override when
+present, otherwise the shared crop. The existing source-versus-encoded-AVI
+comparison shows exactly those edited pixels before and after MJPEG
+compression. Changing a crop invalidates the previously converted AVI so
+the user must reconvert, see its new file size, and decide whether to upload.
+
+The original animated GIF preview at the top remains deliberately
+**unmodified reference footage**; the crop editor shows the active framed
+source frame. The photo cropper and original picture transfer path are
+unchanged, as are the BLE AVI sender, storage preflight, and duration rules.
+
+New regression coverage: `src/tests/video-crop.test.mjs` verifies wide
+rectangular source edge panning, crop bounds and focal zoom, copy semantics,
+and identical 240px/thumbnail rendering coordinates.
