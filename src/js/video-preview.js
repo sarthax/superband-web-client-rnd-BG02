@@ -63,6 +63,7 @@ export class AviComparisonPreview {
       throw new Error('AVI preview frame count does not match encoded file');
     }
     this.info = result.info;
+    this.els.play.disabled = false;
     this.jpegFrames = jpegFrames;
     this.referenceFrames = result.referenceFrames || null;
     this.els.seek.min = '0';
