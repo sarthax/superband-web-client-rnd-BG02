@@ -210,6 +210,39 @@ export function inspectBg02MjpegAvi(input) {
   };
 }
 
+/**
+ * Extract every encoded MJPEG frame in display order without relying on the
+ * browser's native AVI decoder. Validates the same container used for upload.
+ * Each frame is a byte copy so UI previews cannot mutate transfer bytes.
+ */
+export function extractBg02AviFrames(input) {
+  const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+  const info = inspectBg02MjpegAvi(bytes);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const read = (offset) => view.getUint32(offset, true);
+  const frames = [];
+  for (let p = 12; p + 12 <= bytes.length;) {
+    const size = read(p + 4);
+    const end = p + 8 + size;
+    if (end > bytes.length) break;
+    if (ascii(bytes, p) === 'LIST' && ascii(bytes, p + 8) === 'movi') {
+      for (let q = p + 12; q + 8 <= end;) {
+        const chunkSize = read(q + 4);
+        if (q + 8 + chunkSize > end) throw new Error('Incomplete AVI JPEG frame');
+        if (ascii(bytes, q) === '00dc') {
+          frames.push(bytes.slice(q + 8, q + 8 + chunkSize));
+        }
+        q += 8 + chunkSize + (chunkSize & 1);
+      }
+    }
+    p = end + (size & 1);
+  }
+  if (frames.length !== info.frames) {
+    throw new Error('AVI frame count changed during extraction');
+  }
+  return frames;
+}
+
 /** Pull an MJPEG still from a known-compatible AVI for a source thumbnail. */
 export function extractBg02AviFrame(input, frameIndex = 0) {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
