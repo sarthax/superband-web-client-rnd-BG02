@@ -118,6 +118,10 @@ export async function probeBg02RcspTargetInfo(server, {
 
   const seq = 0;
   const assembler = new Bg02RcspAssembler();
+  // Track only metadata. Never retain or log raw RCSP identity/auth bytes.
+  // This distinguishes "nothing arrived on AE02" from "something arrived,
+  // but it did not match opcode/sequence/response framing".
+  const rx = { notifications: 0, bytes: 0, rcspFrames: 0, unmatchedFrames: 0 };
   let settle = null, timeoutId = null;
   let attached = false, subscribed = false;
   const receive = new Promise(resolve => { settle = resolve; });
@@ -126,9 +130,13 @@ export async function probeBg02RcspTargetInfo(server, {
       const value = event?.target?.value;
       if (!value) return;
       const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+      rx.notifications++;
+      rx.bytes += bytes.length;
       for (const frame of assembler.push(bytes)) {
+        rx.rcspFrames++;
         const result = parseMatchingTargetInfo(frame, seq);
         if (result) { settle(result); return; }
+        rx.unmatchedFrames++;
       }
     } catch (error) {
       settle({ error });
@@ -155,17 +163,27 @@ export async function probeBg02RcspTargetInfo(server, {
     }
     if (result.error) throw result.error;
     if (result.timedOut) {
+      const summary = rx.notifications === 0
+        ? 'No AE02 notifications arrived at all.'
+        : rx.rcspFrames === 0
+          ? 'AE02 delivered ' + rx.notifications +
+            ' notification(s), but no complete RCSP envelope was parsed.'
+          : 'AE02 delivered ' + rx.rcspFrames + ' complete RCSP frame(s), ' +
+            'none matching the requested response.';
       return {
         responseReceived: false,
         timedOut: true,
+        rxDiagnostics: { ...rx },
         authConfirmed: false,
         fileListingConfirmed: false,
-        notes: 'No matched GET_TARGET_INFO response. Authentication may be ' +
-          'required, or this command may be unsupported. No further command sent.',
+        notes: summary + ' RCSP authentication is a leading possibility; ' +
+          'the firmware may ignore commands until it passes. ' +
+          'No retry, OTA or file command was sent.',
       };
     }
     return {
       ...result,
+      rxDiagnostics: { ...rx },
       notes: result.status === 0
         ? 'RCSP GET_TARGET_INFO replied with status 0; transport is responsive. ' +
           'File browsing and authentication remain unverified.'
