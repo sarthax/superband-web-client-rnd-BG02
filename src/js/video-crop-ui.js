@@ -9,7 +9,7 @@
  */
 import {
   defaultVideoCrop, copyVideoCrop, clampVideoCrop, panVideoCrop,
-  zoomVideoCrop, drawVideoCrop, VIDEO_CROP_SIZE,
+  zoomVideoCrop, drawVideoCrop, resolveVideoFrameCrop, VIDEO_CROP_SIZE,
 } from './video-crop.js';
 
 export class VideoCropEditor {
@@ -97,7 +97,7 @@ export class VideoCropEditor {
   }
 
   cropForFrame(index) {
-    return this.overrides.get(index) || this.shared;
+    return resolveVideoFrameCrop(this.shared, this.overrides, index);
   }
 
   selected() {
