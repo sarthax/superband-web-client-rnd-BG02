@@ -9,6 +9,10 @@ import { bindVideo } from './video-ui.js';
 import { bindBg02Library } from './bg02-library-ui.js';
 import { estimatePictureStorage } from './picture-size.js';
 import { prepareBg02PictureComparison } from './picture-comparison.js';
+import { encodeBaselineJpeg444 } from './jpeg444.js';
+import {
+  jpegAllocationSummary, jpegTargetAllocation, optimizeJpegAllocation,
+} from './jpeg-allocation.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -83,6 +87,7 @@ function updatePictureCodecControls(snapshot = client.getSnapshot()) {
   const enabled = pictureCodecEligible(snapshot);
   $('#pictureCodecControls').hidden = !enabled;
   $('#pictureJpegQualityWrap').hidden = pictureCodec() !== 'jpeg444';
+  $('#pictureAllocationOptimizer').hidden = !enabled || pictureCodec() !== 'jpeg444';
   $('#pictureJpegQualityLabel').textContent = $('#pictureJpegQuality').value;
   $('#pictureCompareBuild').disabled = !enabled || pictureComparing ||
     transferring || client.anyTransferring;
@@ -90,6 +95,11 @@ function updatePictureCodecControls(snapshot = client.getSnapshot()) {
     client.anyTransferring;
   $('#pictureJpegQuality').disabled = pictureComparing || transferring ||
     client.anyTransferring;
+  for (const id of ['pictureOptimizeSmaller', 'pictureOptimizeCurrent',
+    'pictureOptimizeLarger']) {
+    $('#' + id).disabled = !enabled || pictureComparing ||
+      transferring || client.anyTransferring;
+  }
   $('#pictureRu50Pane').dataset.selected = String(pictureCodec() === 'ru50');
   $('#pictureJpegPane').dataset.selected = String(pictureCodec() === 'jpeg444');
 }
@@ -133,22 +143,54 @@ function drawPicturePixels(canvas, pixels) {
   );
 }
 
-async function comparePicture() {
+async function comparePicture(allocationShift = null) {
   if (!pictureCodecEligible() || pictureComparing ||
       transferring || client.anyTransferring) return;
   const file = $('#imageInput').files?.[0];
   const before = client.getSnapshot();
+  // Capture the currently measured JPEG *before* invalidation. If there is
+  // no comparison yet, measure the current quality from the crop once.
+  const referenceJpeg = pictureComparison?.jpeg?.bytes ?? null;
   invalidatePictureComparison('Encoding the latest crop…');
   const request = ++pictureComparisonGeneration;
   const jpegQuality = Number($('#pictureJpegQuality').value);
   pictureComparing = true;
   $('#pictureComparePrompt').textContent =
-    'Encoding RU50 and JPEG at the current crop…';
-  updatePictureCodecControls();
+    allocationShift == null
+      ? 'Encoding RU50 and JPEG at the current crop…'
+      : 'Finding highest JPEG quality within the selected 8 KiB allocation…';
+  updatePushChecklist();
   try {
     const sourcePixels = cropper.getImageData(240);
+    let optimized = null;
+    if (allocationShift !== null) {
+      const baselineBytes = referenceJpeg ??
+        encodeBaselineJpeg444(sourcePixels, { quality: jpegQuality });
+      const targetBytes = jpegTargetAllocation(baselineBytes.length, allocationShift);
+      $('#pictureOptimizeInfo').textContent =
+        'Target ' + formatBytes(targetBytes) +
+        ' allocation: checking JPEG qualities 90 down to 35…';
+      optimized = await optimizeJpegAllocation(sourcePixels, targetBytes, {
+        checkCurrent: () => request === pictureComparisonGeneration &&
+          file === $('#imageInput').files?.[0] &&
+          before.sessionId === client.getSnapshot().sessionId,
+        onTrial: ({ quality, trials }) => {
+          if (trials % 3 === 1)
+            $('#pictureOptimizeInfo').textContent =
+              'Target ' + formatBytes(targetBytes) +
+              ' · trying quality ' + quality + ' (' + trials + ' encodes)…';
+        },
+      });
+      if (!optimized.fits) {
+        throw new Error('No JPEG quality 35–90 fits ' +
+          formatBytes(targetBytes) + ' allocation. Smallest tested JPEG is ' +
+          formatBytes(optimized.minimumSize.encodedBytes) +
+          '. Choose a larger block or a less complex crop.');
+      }
+    }
     const result = await prepareBg02PictureComparison(sourcePixels, {
-      jpegQuality,
+      jpegQuality: optimized?.quality ?? jpegQuality,
+      preparedJpegBytes: optimized?.bytes ?? null,
     });
     if (request !== pictureComparisonGeneration ||
         file !== $('#imageInput').files?.[0] ||
@@ -176,6 +218,20 @@ async function comparePicture() {
       bitmap.close();
     }
     pictureComparison = result;
+    if (optimized) {
+      // Set the slider programmatically: the JPEG bytes used for preview and
+      // upload are the exact tested bytes, not a second recompression.
+      $('#pictureJpegQuality').value = String(optimized.quality);
+      $('#pictureJpegQualityLabel').textContent = String(optimized.quality);
+      $('#pictureCodec').value = 'jpeg444';
+    }
+    const allocation = jpegAllocationSummary(result.jpeg.bytes.length);
+    $('#pictureOptimizeInfo').textContent =
+      'JPEG quality ' + result.jpegQuality + ' · ' +
+      formatBytes(result.jpeg.bytes.length) + ' file + 4 B wrapper · ' +
+      formatBytes(allocation.allocationBytes) + ' block · ' +
+      formatBytes(allocation.headroomBytes) + ' unused within this allocation' +
+      (optimized ? ' · highest fitting quality (' + optimized.trials + ' tested)' : '');
     $('#pictureRu50Bytes').textContent =
       formatBytes(result.ru50.bytes.length) + ' · ~' +
       formatBytes(estimatePictureStorage({
@@ -1008,6 +1064,9 @@ function bind() {
     invalidatePictureComparison('JPEG quality changed. Reconvert to preview new bytes.');
   });
   $('#pictureCompareBuild').addEventListener('click', () => void comparePicture());
+  $('#pictureOptimizeCurrent').addEventListener('click', () => void comparePicture(0));
+  $('#pictureOptimizeSmaller').addEventListener('click', () => void comparePicture(-1));
+  $('#pictureOptimizeLarger').addEventListener('click', () => void comparePicture(1));
   $('#btnPickImage').addEventListener('click', () => $('#imageInput').click());
   $('#imageInput').addEventListener('change', () => rebuildPreview());
   $('#dialW').addEventListener('change', () => rebuildPreview());
