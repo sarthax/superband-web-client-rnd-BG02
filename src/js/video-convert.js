@@ -1,11 +1,10 @@
 /**
  * Browser-side BG02 MJPEG AVI encoder.
- * Video input uses the browser's own decoders; animated GIF uses gifuct-js
- * patches so we sample the correct frame at 3 fps, including GIF disposal.
+ * Video and animated GIF use Chrome/Edge's built-in media decoders.
+ * ImageDecoder returns composited GIF frames and their playback durations.
  *
  * No MP4/WebM decoder is bundled. Unsupported formats fail with a clear error.
  */
-import { parseGIF, decompressFrames } from 'gifuct-js';
 import { BG02_VIDEO, muxBg02MjpegAvi, inspectBg02MjpegAvi } from './video-avi.js';
 
 export const VIDEO_QUALITIES = Object.freeze({
@@ -48,34 +47,51 @@ export async function openVideoSource(file) {
   }
   const gif = file.type === 'image/gif' || /\.gif$/i.test(file.name);
   if (gif) {
-    // Keep memory use bounded; decompressed patches can be much larger than GIF.
     if (file.size > 25 * 1024 * 1024) {
       throw new Error('GIF input must be 25 MB or smaller');
     }
-    const data = await file.arrayBuffer();
-    const parsed = parseGIF(data);
-    const width = parsed.lsd.width, height = parsed.lsd.height;
-    if (!width || !height || width * height > 2_000_000) {
-      throw new Error('GIF source dimensions too large');
+    if (typeof ImageDecoder === 'undefined' ||
+        !(await ImageDecoder.isTypeSupported('image/gif'))) {
+      throw new Error('Animated GIF conversion needs Chrome/Edge ImageDecoder support. Convert GIF to MP4 if unavailable.');
     }
-    const frames = decompressFrames(parsed, true);
-    if (!frames.length || frames.length > 1500) {
-      throw new Error('GIF must have 1–1,500 frames');
+    const decoder = new ImageDecoder({
+      data: new Uint8Array(await file.arrayBuffer()),
+      type: 'image/gif',
+      preferAnimation: true,
+    });
+    try {
+      await decoder.tracks.ready;
+      const count = decoder.tracks.selectedTrack?.frameCount || 0;
+      if (!count || count > 1500) throw new Error('GIF must have 1–1,500 frames');
+      let durationMs = 0;
+      let width = 0, height = 0;
+      const ends = [];
+      for (let i = 0; i < count; i++) {
+        const { image } = await decoder.decode({ frameIndex: i });
+        if (!width) {
+          width = image.displayWidth;
+          height = image.displayHeight;
+          if (!width || !height || width * height > 2_000_000) {
+            image.close();
+            throw new Error('GIF source dimensions too large');
+          }
+        }
+        const frameMs = Number(image.duration) / 1000;
+        durationMs += Math.max(20, Number.isFinite(frameMs) && frameMs > 0 ? frameMs : 100);
+        ends.push(durationMs);
+        image.close();
+      }
+      const previewUrl = URL.createObjectURL(file);
+      return {
+        kind: 'gif', name: file.name, width, height,
+        durationSeconds: durationMs / 1000,
+        decoder, ends, previewUrl,
+        close() { decoder.close(); URL.revokeObjectURL(previewUrl); },
+      };
+    } catch (e) {
+      decoder.close();
+      throw e;
     }
-    let durationMs = 0;
-    const ends = [];
-    for (const f of frames) {
-      // gifuct-js reports delay in milliseconds, typically >=20.
-      durationMs += Math.max(20, Number(f.delay) || 100);
-      ends.push(durationMs);
-    }
-    return {
-      kind: 'gif', name: file.name, width, height,
-      durationSeconds: durationMs / 1000,
-      frames, ends,
-      previewUrl: URL.createObjectURL(file),
-      close() { URL.revokeObjectURL(this.previewUrl); },
-    };
   }
 
   const url = URL.createObjectURL(file);
@@ -108,62 +124,20 @@ export async function openVideoSource(file) {
 }
 
 function gifSampler(source) {
-  const surface = document.createElement('canvas');
-  surface.width = source.width; surface.height = source.height;
-  const ctx = surface.getContext('2d', { willReadFrequently: true });
-  const patchSurface = document.createElement('canvas');
-  const patchCtx = patchSurface.getContext('2d');
-  let current = -1, prevFrame = null, restorePrevious = null;
-
-  function reset() {
-    ctx.clearRect(0, 0, surface.width, surface.height);
-    current = -1; prevFrame = null; restorePrevious = null;
-  }
-
-  function selectIndex(ms) {
-    // The source GIF can itself loop. Only the user's selected interval is
-    // repeated by the higher-level encoder, not the whole file implicitly.
+  return async (seconds) => {
+    const ms = Math.max(0, Math.min(
+      source.durationSeconds * 1000 - 0.001, seconds * 1000,
+    ));
     let l = 0, r = source.ends.length - 1;
     while (l < r) {
       const m = (l + r) >> 1;
       if (ms < source.ends[m]) r = m;
       else l = m + 1;
     }
-    return l;
-  }
-
-  function stepTo(index) {
-    if (index < current) reset();
-    for (let i = current + 1; i <= index; i++) {
-      if (prevFrame) {
-        const { left, top, width, height } = prevFrame.dims;
-        if (prevFrame.disposalType === 2) ctx.clearRect(left, top, width, height);
-        else if (prevFrame.disposalType === 3 && restorePrevious) {
-          ctx.putImageData(restorePrevious, 0, 0);
-        }
-      }
-      const f = source.frames[i];
-      restorePrevious = f.disposalType === 3 ?
-        ctx.getImageData(0, 0, surface.width, surface.height) : null;
-      const { width, height, left, top } = f.dims;
-      patchSurface.width = width; patchSurface.height = height;
-      patchCtx.putImageData(
-        new ImageData(new Uint8ClampedArray(f.patch), width, height), 0, 0,
-      );
-      // drawImage composites transparent patch pixels over the old frame.
-      ctx.drawImage(patchSurface, left, top);
-      prevFrame = f;
-      current = i;
-    }
-  }
-
-  return (seconds) => {
-    const ms = Math.max(0, Math.min(
-      source.durationSeconds * 1000 - 0.001, seconds * 1000,
-    ));
-    const index = selectIndex(ms);
-    stepTo(index);
-    return surface;
+    // Chrome's ImageDecoder composites GIF disposal/transparency per frame.
+    // It returns a VideoFrame: close it as soon as the canvas has sampled it.
+    const { image } = await source.decoder.decode({ frameIndex: l });
+    return image;
   };
 }
 
@@ -256,12 +230,16 @@ export async function convertVideoToBg02Avi(source, {
     const span = stop - begin;
     const at = begin + (loop ? t % span : Math.min(t, span - 0.001));
     let picture;
-    if (source.kind === 'gif') picture = renderGif(at);
+    if (source.kind === 'gif') picture = await renderGif(at);
     else {
       await seekVideo(source, at, signal);
       picture = source.video;
     }
-    coverOrContain(ctx, picture, source.width, source.height, fit);
+    try {
+      coverOrContain(ctx, picture, source.width, source.height, fit);
+    } finally {
+      if (source.kind === 'gif') picture.close();
+    }
     if (i === 0) thumbnail = canvas.toDataURL('image/jpeg', opts.jpegQuality);
     frameBytes.push(await jpegFromCanvas(canvas, opts.jpegQuality));
     onProgress({ frame: i + 1, total, percent: Math.round((i + 1) * 100 / total) });
