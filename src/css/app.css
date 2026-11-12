@@ -917,3 +917,43 @@ input[type='number'] {
 
 /* Hidden state must beat the preview's explicit display:block rules. */
 .dial img[hidden], .dial canvas[hidden], .dial .placeholder[hidden] { display: none; }
+
+/* Picture-editor byte/space preflight; no encoded bytes are changed here. */
+.picture-size-preview {
+  display: grid;
+  gap: .6rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: .85rem;
+  background: rgba(0,0,0,.17);
+}
+.picture-size-preview[hidden],.bg02-library[hidden] { display: none; }
+.picture-size-preview h3 { margin: 0; font-size: 1rem; }
+.picture-size-grid {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: .65rem;
+}
+.picture-size-grid > div {
+  padding: .55rem;
+  border-radius: 8px;
+  background: rgba(0,0,0,.22);
+  display: grid;
+  gap: .25rem;
+}
+.picture-size-grid span { font-size: .73rem; color: var(--muted); }
+.picture-size-grid strong {
+  font-size: .9rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.picture-size-grid .picture-too-large { color: var(--rose); }
+.bg02-library { grid-column: 1 / -1; display: grid; gap: .8rem; }
+.bg02-library h2 small {
+  margin-left: .35rem;
+  font-size: .68rem;
+  color: var(--amber);
+}
+@media (max-width: 420px) {
+  .picture-size-grid { grid-template-columns: minmax(0,1fr); }
+}
