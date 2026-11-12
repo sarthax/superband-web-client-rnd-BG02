@@ -1,182 +1,87 @@
-# SuperBand Web Client (RnD)
+# BG02 Picture Manager
 
-[![Validate](https://github.com/T-REX-XP/superband-web-client-rnd/actions/workflows/validate.yml/badge.svg)](https://github.com/T-REX-XP/superband-web-client-rnd/actions/workflows/validate.yml)
-[![Pages](https://github.com/T-REX-XP/superband-web-client-rnd/actions/workflows/pages.yml/badge.svg)](https://github.com/T-REX-XP/superband-web-client-rnd/actions/workflows/pages.yml)
+A browser-based picture uploader for the **BG02 / LJ733 electronic badge** and a research-compatible manager for other SuperBand/Baji/FitPro badges.
 
-Unofficial RnD investigation of the **SuperBand / electronic badge** Bluetooth LE protocol (Baji UART), plus a browser client to manage the device.
+**Everyday workflow:** Connect badge → Choose a picture → Crop/zoom → Upload.
 
-| Piece | Path | Purpose |
-|-------|------|---------|
-| Application sources | [`src/`](src/) | Bun Web Bluetooth manager + debug console |
-| Protocol docs | [`docs/`](docs/) | GATT, framing, media, dial push, OTA, security |
-| Tools | [`tools/`](tools/) | Download / analyze / **send OTA**, unpack APK |
-| Artifacts | [`artifacts/`](artifacts/) | Local APKs (gitignored) |
-| Research | [`research/`](research/) | Unpacked client + firmware zips (gitignored) |
+This is a **static browser application**, not a picture-storage web server. The image is processed in your browser and sent directly to the badge with Web Bluetooth; it is not uploaded to a website or cloud service.
 
-Derived from SuperBand app `com.legend.smartwatch.electronicbadge.android` **2.1.25**. Not affiliated with the device vendor or app publisher.
+## Use it
 
-Changelog: [CHANGELOG.md](CHANGELOG.md)
+- Open the [fork's GitHub Pages site](https://sarthax.github.io/superband-web-client-rnd-BG02/) **after the picture branch has been deployed**, or run locally (see below).
+- Use **Chrome or Edge on desktop** with Bluetooth enabled. Web Bluetooth generally requires HTTPS or localhost; Firefox does not provide the required Web Bluetooth API.
+- Click **Connect badge**, choose a JPG/PNG/WebP, drag inside the circular crop, adjust Zoom, and click **Upload picture**.
+- After the transfer is acknowledged, **check the badge display**. Bluetooth success does not prove on-device rendering.
+- Advanced users can still import pre-encoded **.ru50** pictures for BG02.
 
-## Repository layout
+**BG02 V35922:** Fixed 240×240 output, browser ETC2 RGB8 encoding inside the RU50 container (29,904 bytes), sent using the existing FitPro Dial31 transfer. The invalid direct RGB565 route is blocked for confirmed BG02 devices. For other devices the existing Baji JPEG or generic FitPro RGB565 paths remain available. The controls and format adapt to the *connected* badge.
 
-```
-.
-├── src/                   # All application sources
-│   ├── js/ css/ …         # Primary Web Bluetooth manager (Bun)
-│   └── debug-console/     # Low-level protocol console
-├── tools/                 # Firmware download, send-ota, APK unpack helpers
-├── docs/                  # Protocol + usage documentation
-├── artifacts/             # Local APK bundles (not committed)
-├── research/              # Unpacked/jadx + firmware (not committed)
-└── .github/workflows/     # Validate + GitHub Pages
-```
+The browser crop/encoder has been implemented and the owner has reported working image uploads. **Before the final public release, verify that the merged/released commit is the one that produced the good on-device picture.** Earlier PR descriptions still label their own snapshots as hardware-unverified.
 
-## Device
+### What is *not* supported on BG02
 
-Hardware under test / target product listing:
+- Downloading, listing, or deleting pictures already stored on the badge.
+- Badge-to-badge sharing from the web page.
+- Automatic GIF/AVI upload from the browser (experimental external conversion tools are not part of this UI).
+- Firmware flashing as part of picture uploads. **Do not use an unrelated BJ-1/DG01 OTA package on BG02.**
 
-**[SuperBand electronic badge on AliExpress](https://es.aliexpress.com/item/1005010799519769.html?aem_p4p_detail=2026081110174310473788308808310000293153&pdp_ext_f=%7B%22order%22%3A%22340%22%2C%22eval%22%3A%221%22%2C%22fromPage%22%3A%22search%22%7D&search_p4p_id=2026081110174310473788308808310000293153_3)**
+The extensive Bluetooth/firmware experiments remain separate and are **not needed** for ordinary pictures.
 
-Typical discovery hints from the reference client:
+## Run locally (Windows / macOS / Linux)
 
-- Manufacturer company ID `0xAA01`
-- Device type `3` (electronic badge)
-- Name pattern `_V\d+_BadgeOK` (e.g. `Something_V12_BadgeOK`)
-
-## Protocol (short)
-
-- **GATT UART:** service `7E400001-B5A3-F393-E0A9-E50E24DCCA9D`  
-  write `…0002` · notify `…0003`
-- **JieLi OTA:** service `0000AE00-…` · write `AE01` · notify `AE02`
-- **Frames:** `0xCD` start — Baji uses product `0x25`; FitPro dial uses modules `0x1F` / `0x20`
-- **Baji upload:** media ID → `TRANSFER_START` → ~200 B chunks → CRC32 → verify
-- **FitPro push (BJ-1):** dial31 start → data + byte-sum → finish ([dial-upload](docs/protocol/dial-upload.md))
-
-Full write-up: [docs/README.md](docs/README.md) · cheat sheet: [docs/BLE_PROTOCOL.md](docs/BLE_PROTOCOL.md)
-
----
-
-## Web Bluetooth client
-
-Chrome / Edge only. Prefer the hosted GitHub Pages build (HTTPS is required for Web Bluetooth):
-
-**[https://t-rex-xp.github.io/superband-web-client-rnd/](https://t-rex-xp.github.io/superband-web-client-rnd/)**
-
-### Features
-
-The manager UI has two tabs: **Manager** (day-to-day) and **Advanced** (OTA / probes — same jobs as `tools/send-ota.sh`).
-
-#### Manager tab
-
-| Feature | Description |
-|---------|-------------|
-| Multi-badge connect | Filtered picker (`BJ*` / `DG*` / `_V*` / mfg `0xAA01`) or any device; add / switch active / disconnect one or all |
-| Device identity | GAP name + GATT DIS (`0x180A`) model / FW / HW / SW / mfg + battery; optional Baji storage |
-| Glance strip | Active badge name, model, firmware, battery, hardware, free storage |
-| Push image | Cover-crop to dial (default 360×360), round mask, JPEG ~q50 → **Baji** file transfer or **FitPro dial31** (auto) |
-| Push to all | Same image to every connected badge (sequential) |
-| Media library | Allocate / list / delete media IDs (Baji only; skipped on FitPro badges like BJ-1) |
-| Activity log | TX/RX and status |
-
-#### Advanced tab
-
-| Feature | Description |
-|---------|-------------|
-| OTA package | CDN presets **BJ-1** / **DG01**, local `.zip` / `.ufw`, tomato catalog probe (CORS may block — presets still work) |
-| GATT / AE00 probe | List services on the active connection, or picker focused on JieLi OTA |
-| BLE OTA flash | JieLi RCSP over `AE01`/`AE02` (openwearota-compatible); risk confirm required — wrong image can brick |
-| Protocol probes | Legacy `0x1A` handshake, pair frame, opt-in dial-info `0x20` (can drop BJ-1) |
-| USB / risks | Chipkey `$B165` forced-update notes + security findings (F1–F8) |
-
-More UI detail: [docs/web-console.md](docs/web-console.md) · risks: [docs/protocol/security.md](docs/protocol/security.md)
-
-### Run locally
-
-Requires [Bun](https://bun.sh).
+Requires [Bun](https://bun.sh/) and a Chromium-family browser.
 
 ```bash
 cd src
-bun install
+bun install --frozen-lockfile
 bun run dev
-# → http://localhost:8787
+# Open http://localhost:8787
 ```
 
-Production build / Pages-shaped preview:
+Focused regression and production build:
 
 ```bash
 cd src
+node --test tests/ru50.test.mjs tests/device-profile.test.mjs tests/browser-etc2.test.mjs
 bun run build
-bun run preview:dist
-# → http://localhost:8788
-
-BASE_PATH=/superband-web-client-rnd/ bun run build
 ```
 
-More: [src/README.md](src/README.md) · [docs/web-console.md](docs/web-console.md)
+No Python, `etcpak`, phone app, or local firmware SDK is required for the **browser photo workflow**.
 
----
+## Day-to-day UI vs research
 
-## Debug console
+| View | What belongs there |
+|---|---|
+| **Pictures** | Connect/disconnect, active badge, choose image, crop and zoom, upload, persistent progress/error messages |
+| **Optional device details** | Technical identity fields and re-pair controls |
+| **Advanced** | Activity log, GATT/OTA information, protocol probes and research controls; **not needed to upload** |
 
-Low-level console (raw hex, arbitrary Baji packets):
+For BG02 the unrelated Baji media library and BJ-1/DG01 OTA presets are hidden or disabled. Other supported device families retain their original behavior.
 
-```bash
-cd src/debug-console
-python3 -m http.server 8765
-# → http://localhost:8765
-```
+## Code and documentation
 
----
+| Location | Content |
+|---|---|
+| [`src/`](src/) | Browser UI, image conversion, Web Bluetooth and static production build |
+| [`src/js/circle-crop.js`](src/js/circle-crop.js) | Drag, touch/pinch, zoom, and circular output |
+| [`src/js/ru50.js`](src/js/ru50.js), [`src/js/etc2.js`](src/js/etc2.js) | RU50 wrapper, CRC16 and browser ETC2 encoding |
+| [`src/js/device-profile.js`](src/js/device-profile.js) | BG02 vs Baji vs generic FitPro behavior |
+| [BG02 browser crop and codec](docs/BG02-BROWSER-CROP.md) | Original picture workflow and acceptance checks |
+| [Device-aware UI](docs/DEVICE-AWARE-UI.md) | Device capability boundaries and precautions |
+| [RU50 research](docs/BG02-RU50-EXPERIMENT.md) | Historical manual encoder/import fallback |
+| [Protocol notes](docs/README.md) | GATT, FitPro, Baji, OTA, security and reverse-engineering references |
+| [Research and firmware tools](tools/README.md) | Optional standalone tooling; **not required for picture uploads** |
 
-## Tools (firmware / APK)
+The **picture upload changes are stacked** as draft PRs [#1](https://github.com/sarthax/superband-web-client-rnd-BG02/pull/1), [#2](https://github.com/sarthax/superband-web-client-rnd-BG02/pull/2), and [#3](https://github.com/sarthax/superband-web-client-rnd-BG02/pull/3). Finish and review the [picture cleanup PR](https://github.com/sarthax/superband-web-client-rnd-BG02/pulls) on top of #3 before merging in order. **Do not merge or deploy unreviewed local overrides.**
 
-```bash
-./tools/download-firmware.sh --preset all          # DG01 + BJ-1 SuperBand zips
-./tools/download-firmware.sh --preset bj1          # BJ-1 package
-./tools/send-ota.sh --preset bj1 --prepare         # zip → app.ufw
-./tools/send-ota.sh --scan                         # BLE scan (venv auto-created)
-./tools/send-ota.sh --preset bj1 --ble --address AA:BB:CC:DD:EE:FF
-./tools/unpack-apk.sh                              # artifacts/*.apks → research/unpacked/
-bun tools/probe-ota.mjs --name BJ-1 --version V32172
-```
+The separate [BG02 peer sharing / readback research PR #4](https://github.com/sarthax/superband-web-client-rnd-BG02/pull/4) is intentionally not part of the picture release.
 
-Details: [tools/README.md](tools/README.md) · [Firmware OTA](docs/protocol/ota-firmware.md) · [Security](docs/protocol/security.md)
+## Deployment
 
-## Documentation
+The static site is published by [GitHub Pages Actions](.github/workflows/pages.yml). The workflow calculates the repository's base path. A push to `main` or an explicit manual workflow run can deploy the chosen branch; **manual deployment replaces the current Pages site**, so test the merged commit before publishing it. The single [Validate workflow](.github/workflows/validate.yml) runs the three focused image tests and builds the web client.
 
-| Doc | Description |
-|-----|-------------|
-| [Getting started](docs/getting-started.md) | Layout, Bun, connect a badge |
-| [Tools](tools/README.md) | Firmware download, send-ota, APK unpack |
-| [Protocol overview](docs/protocol/overview.md) | Architecture |
-| [GATT](docs/protocol/gatt.md) | UUIDs / TX / RX |
-| [Framing](docs/protocol/framing.md) | Packet layout |
-| [Web client](docs/web-console.md) | Manager + Advanced tab feature guide |
-| [File transfer](docs/protocol/file-transfer.md) | Chunked upload + CRC32 |
-| [Dial upload](docs/protocol/dial-upload.md) | FitPro dial31 picture push (BJ-1) |
-| [Media](docs/protocol/media.md) | IDs, list, delete |
-| [Firmware OTA](docs/protocol/ota-firmware.md) | JieLi OTA catalog + zip URLs + send-ota |
-| [Security research](docs/protocol/security.md) | OTA / UART / CDN risk findings |
-| [Firmware hardware](docs/protocol/firmware-hw.md) | AC707N SoC / peripherals from UFW |
-| [Firmware contract](docs/protocol/firmware-contract.md) | Clean-room on-device contract for open FW |
-| [Firmware rewrite](docs/firmware-rewrite/README.md) | SDK gate · RE · dial-info · Stage 1/2 scaffold |
-| [Commands](docs/protocol/commands.md) | Opcode tables |
-| [RnD investigation](docs/rnd-investigation.md) | Reference client notes |
+## Attribution and safety
 
----
+Fork of [T-REX-XP/superband-web-client-rnd](https://github.com/T-REX-XP/superband-web-client-rnd), derived from unofficial research into SuperBand Android 2.1.25 (`com.legend.smartwatch.electronicbadge.android`). Additional experimental media-format references include [arqueomendez/ebadge](https://github.com/arqueomendez/ebadge). Not affiliated with the badge vendor or app publisher.
 
-## GitHub Actions
-
-| Workflow | Purpose |
-|----------|---------|
-| [Validate](.github/workflows/validate.yml) | Bun install + production build check |
-| [Pages](.github/workflows/pages.yml) | Build `src/` and deploy to GitHub Pages |
-
-Enable **Settings → Pages → Source: GitHub Actions** before the first deploy.  
-Manual deploy: **Actions → Pages → Run workflow**.
-
----
-
-## Disclaimer
-
-This project is for research and interoperability. Use at your own risk. The AliExpress link is a convenience reference to the hardware form-factor under investigation; product availability and firmware may differ.
+Use only with devices and firmware you control. Advanced OTA flashing and protocol tools can disconnect or permanently damage a device; picture uploads **do not require** them.

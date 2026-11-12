@@ -12,7 +12,7 @@ This branch adds a kid-friendly picture workflow for **BG02 / LJ733_MB_V1.5 / V3
 
 The editor crops to a **round 240×240 viewport** and fills corners with black. The image is encoded to ETC2 RGB8 (using its standards-valid ETC1 individual-mode subset), wrapped in the 0x450-byte RU50 header with the vendor CRC16 fields, and sent through the existing FitPro Dial31 ACK-driven uploader. Total encoded file size should be **29,904 bytes** (28,800 ETC bytes + 1,104-byte header).
 
-The browser-side encoder is **new and requires a real BG02 render test**. The original local `etcpak` encoder is still available as a known-good fallback. The two encoders do not produce byte-identical compressed textures: they choose different ETC2 compression modes, but both are nominally valid ETC2 RGB8 encodings. Do not merge until the badge shows the resulting picture correctly.
+The browser encoder is implemented and the owner reports successful pictures from a working browser setup. **The exact release-branch commit still needs one final on-device verification before publishing.** The original local `etcpak` encoder is still available as a known-good fallback. The two encoders do not produce byte-identical compressed textures: they choose different ETC2 compression modes, but both are nominally valid ETC2 RGB8 encodings. Before release, verify the badge shows a correctly colored picture from the exact candidate commit.
 
 ## Notes
 
@@ -41,6 +41,10 @@ One real-device test: choose a four-quadrant red/green/blue/yellow JPG or PNG,
 center the crop, upload, and verify the display. Then drag/zoom a photograph
 and repeat once to check the crop positioning. Capture a sanitized activity
 log only if the display is black or the transfer fails.
+
+## Cleanup release gate
+
+The simplified **Pictures** page now puts uploading first, collapses technical badge details and keeps activity logs under **Advanced**. See [BG02 picture release checklist](BG02-PICTURE-RELEASE-CHECKLIST.md) for the stacked PR order, final one-session device check and deployment steps.
 
 ## Branch/Pages
 

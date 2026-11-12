@@ -502,6 +502,42 @@ button.danger {
   }
 }
 
+/* The everyday Pictures view is a single focused task; diagnostics stay in Advanced. */
+#tab-manager > .grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.picture-section,
+.device-section {
+  grid-column: 1 / -1;
+}
+
+.device-details > summary {
+  cursor: pointer;
+  color: var(--mint);
+  font-size: 0.88rem;
+  padding: 0.45rem 0.2rem;
+}
+
+.device-details > summary:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 3px;
+}
+
+.device-details[open] > .stack {
+  margin-top: 0.85rem;
+}
+
+#pushStatus[data-state='busy'] {
+  color: var(--amber);
+}
+#pushStatus[data-state='ok'] {
+  color: var(--ok);
+}
+#pushStatus[data-state='err'] {
+  color: var(--rose);
+}
+
 .section {
   background: var(--panel);
   border: 1px solid var(--line);

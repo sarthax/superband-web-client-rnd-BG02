@@ -37,10 +37,7 @@
             >
           </nav>
         </div>
-        <p>
-          Manage pictures on Bluetooth badges. Image settings adapt to the connected device; diagnostics
-          and firmware research stay under Advanced.
-        </p>
+        <p>Connect a badge, choose a photo, adjust the crop, and upload it. Technical tools stay under Advanced.</p>
         <div class="hero-cta">
           <span class="status-pill" id="connPill" data-state="">Disconnected</span>
           <span class="status-pill" id="blePill">Checking Bluetooth…</span>
@@ -81,7 +78,7 @@
 
       <div class="tabs" role="tablist" aria-label="App views">
         <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="manager">
-          Manager
+          Pictures
         </button>
         <button type="button" class="tab" role="tab" aria-selected="false" data-tab="advanced">
           Advanced
@@ -90,12 +87,76 @@
 
       <div id="tab-manager" class="tab-panel active" role="tabpanel">
         <div class="grid">
-          <section class="section">
-            <h2>Device</h2>
+          <section class="section picture-section">
+            <h2>Choose and upload a picture</h2>
             <p class="lead">
-              Connected badge information, hardware version, firmware and battery.
+              <span id="imageFormatHelp">Connect a badge to choose the right image format and size.</span>
             </p>
             <div class="stack">
+              <ul class="checklist" id="pushChecklist">
+                <li data-check="conn">Connected</li>
+                <li data-check="image">Image ready</li>
+                <li data-check="idle">Transfer idle</li>
+              </ul>
+              <div class="dial-stage">
+                <div class="dial round" id="dial">
+                  <div class="placeholder" id="dialPlaceholder">Choose a picture<br />to preview</div>
+                  <img id="dialPreview" alt="" hidden />
+                  <canvas id="cropCanvas" width="320" height="320" aria-label="Round photo crop. Drag to move the photo." hidden></canvas>
+                </div>
+                <div id="cropControls" class="crop-controls" hidden>
+                  <label for="cropZoom">Zoom</label>
+                  <input id="cropZoom" type="range" min="100" max="400" value="100" step="1" aria-label="Photo zoom" />
+                  <span id="cropZoomValue" class="crop-zoom-value">100%</span>
+                  <button type="button" id="cropReset">Reset</button>
+                  <p class="hint crop-tip">Drag the photo to move it. Use the slider, scroll wheel, or pinch to zoom.</p>
+                </div>
+                <div class="row">
+                  <input class="file-input" id="imageInput" type="file" accept="image/*,.ru50" />
+                  <button type="button" id="btnPickImage">Choose picture</button>
+                  <button class="primary" data-need-conn disabled id="btnPush">Upload to badge</button>
+                  <button data-need-conn disabled id="btnPushAll" hidden>Push to all</button>
+                </div>
+              </div>
+              <div class="row">
+                <label class="field" id="dialWidthOption">
+                  Width
+                  <input id="dialW" type="number" value="360" min="16" max="1024" />
+                </label>
+                <label class="field" id="dialHeightOption">
+                  Height
+                  <input id="dialH" type="number" value="360" min="16" max="1024" />
+                </label>
+                <label class="field" id="roleOptions">
+                  Role
+                  <select id="functionType">
+                    <option value="1" selected>Background</option>
+                    <option value="4">Preview</option>
+                    <option value="2">Sticker</option>
+                  </select>
+                </label>
+              </div>
+              <label class="check" id="roundMaskOption"
+                ><input type="checkbox" id="roundMask" checked /> Round screen mask</label
+              >
+              <label class="check" id="allocMediaOption"
+                ><input type="checkbox" id="allocMedia" checked /> Allocate media ID</label
+              >
+              <p class="lead" id="imageMeta">No image selected.</p>
+              <p class="hint" id="imageInputHint">Connect a badge to see supported image formats.</p>
+              <p class="hint" id="pushStatus" role="status" aria-live="polite">Connect your badge, choose a photo, adjust the crop, then upload.</p>
+              <div class="progress" id="pushProgress" role="progressbar" aria-label="Picture upload" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i id="pushBar"></i></div>
+            </div>
+          </section>
+
+          <section class="section device-section">
+            <h2>Device details</h2>
+            <p class="lead">
+              The badge name, firmware and battery are summarized above. Technical details are optional.
+            </p>
+            <details class="device-details">
+              <summary>Show device information and re-pair controls</summary>
+              <div class="stack">
               <div class="stats" id="deviceStats">
                 <div class="stat">
                   <span class="k">Name</span><span class="v" data-field="name">—</span>
@@ -133,69 +194,8 @@
                 <button data-need-conn disabled id="btnRefresh">Refresh info</button>
                 <button data-need-conn disabled id="btnPair">Re-pair</button>
               </div>
-            </div>
-          </section>
-
-          <section class="section">
-            <h2>Upload image</h2>
-            <p class="lead">
-              <span id="imageFormatHelp">Connect a badge to choose the right image format and size.</span>
-            </p>
-            <div class="stack">
-              <ul class="checklist" id="pushChecklist">
-                <li data-check="conn">Connected</li>
-                <li data-check="image">Image ready</li>
-                <li data-check="idle">Transfer idle</li>
-              </ul>
-              <div class="dial-stage">
-                <div class="dial round" id="dial">
-                  <div class="placeholder" id="dialPlaceholder">Choose an image<br />to preview</div>
-                  <img id="dialPreview" alt="" hidden />
-                  <canvas id="cropCanvas" width="320" height="320" aria-label="Round photo crop. Drag to move the photo." hidden></canvas>
-                </div>
-                <div id="cropControls" class="crop-controls" hidden>
-                  <label for="cropZoom">Zoom</label>
-                  <input id="cropZoom" type="range" min="100" max="400" value="100" step="1" aria-label="Photo zoom" />
-                  <span id="cropZoomValue" class="crop-zoom-value">100%</span>
-                  <button type="button" id="cropReset">Reset</button>
-                  <p class="hint crop-tip">Drag the photo to move it. Use the slider, scroll wheel, or pinch to zoom.</p>
-                </div>
-                <div class="row">
-                  <input class="file-input" id="imageInput" type="file" accept="image/*,.ru50" />
-                  <button type="button" id="btnPickImage">Choose image</button>
-                  <button class="primary" data-need-conn disabled id="btnPush">Upload to badge</button>
-                  <button data-need-conn disabled id="btnPushAll" hidden>Push to all</button>
-                </div>
               </div>
-              <div class="row">
-                <label class="field" id="dialWidthOption">
-                  Width
-                  <input id="dialW" type="number" value="360" min="16" max="1024" />
-                </label>
-                <label class="field" id="dialHeightOption">
-                  Height
-                  <input id="dialH" type="number" value="360" min="16" max="1024" />
-                </label>
-                <label class="field" id="roleOptions">
-                  Role
-                  <select id="functionType">
-                    <option value="1" selected>Background</option>
-                    <option value="4">Preview</option>
-                    <option value="2">Sticker</option>
-                  </select>
-                </label>
-              </div>
-              <label class="check" id="roundMaskOption"
-                ><input type="checkbox" id="roundMask" checked /> Round screen mask</label
-              >
-              <label class="check" id="allocMediaOption"
-                ><input type="checkbox" id="allocMedia" checked /> Allocate media ID</label
-              >
-              <p class="lead" id="imageMeta">No image selected.</p>
-              <p class="hint" id="imageInputHint">Connect a badge to see supported image formats.</p>
-              <p class="hint">Based on the <a href="https://github.com/T-REX-XP/superband-web-client-rnd" target="_blank" rel="noopener noreferrer">original SuperBand web client</a>.</p>
-              <div class="progress" id="pushProgress" hidden><i id="pushBar"></i></div>
-            </div>
+            </details>
           </section>
 
           <section class="section" id="mediaLibrarySection" style="grid-column: 1 / -1" hidden>
@@ -337,8 +337,6 @@
             <ul class="finding-list" id="securityFindings"></ul>
           </section>
         </div>
-      </div>
-
       <section class="section log-panel">
         <div class="log-head">
           <h2>Activity</h2>
@@ -346,6 +344,7 @@
         </div>
         <div id="activityLog"></div>
       </section>
+      </div>
 
       <footer class="site-footer">
         <span id="buildMeta">Badge Manager</span>
