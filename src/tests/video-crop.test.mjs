@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   VIDEO_CROP_SIZE, defaultVideoCrop, copyVideoCrop,
   videoCropGeometry, clampVideoCrop, panVideoCrop,
-  zoomVideoCrop, drawVideoCrop,
+  zoomVideoCrop, drawVideoCrop, resolveVideoFrameCrop,
 } from '../js/video-crop.js';
 
 test('a wide rectangular GIF can pan edge-to-edge inside 240px round viewport', () => {
@@ -82,4 +82,16 @@ test('invalid inputs are rejected instead of silently producing nonsense', () =>
   assert.throws(()=>videoCropGeometry(0,100));
   assert.throws(()=>videoCropGeometry(100,Infinity));
   assert.throws(()=>videoCropGeometry(100,100,undefined,'garbage'));
+});
+
+test('thumbnails and encoder resolve identical per-GIF-frame overrides', () => {
+  const shared={zoom:1,offsetX:0,offsetY:0};
+  const third={zoom:2.2,offsetX:35,offsetY:-12};
+  const map=new Map([[3,third]]);
+  assert.strictEqual(resolveVideoFrameCrop(shared,map,3),third);
+  assert.strictEqual(resolveVideoFrameCrop(shared,map,2),shared);
+  assert.strictEqual(resolveVideoFrameCrop(shared,map,null),shared);
+  const objectOverrides={3:third};
+  assert.strictEqual(resolveVideoFrameCrop(shared,objectOverrides,3),third);
+  assert.strictEqual(resolveVideoFrameCrop(shared,objectOverrides,4),shared);
 });
