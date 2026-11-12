@@ -40,7 +40,7 @@ const version =
   (pkg.version?.startsWith(`${yyyy}.${mm}.${dd}.`) ? pkg.version : `${yyyy}.${mm}.${dd}.${buildNum}`);
 const versionPayload = {
   version,
-  repository: process.env.GITHUB_REPOSITORY || 'T-REX-XP/superband-web-client-rnd',
+  repository: process.env.GITHUB_REPOSITORY || 'sarthax/superband-web-client-rnd-BG02',
   built_at: new Date().toISOString(),
   source: process.env.GITHUB_ACTIONS ? 'pages-workflow' : 'local-build',
   base_path: publicPath,
@@ -66,8 +66,8 @@ const redirect = `<!DOCTYPE html>
 await Bun.write(`${outdir}/404.html`, redirect);
 
 // Keep a copy of index as fallback content for hosts that serve 404.html body.
-if (!indexHtml.includes('SUPERBAND')) {
-  console.warn('Unexpected index.html — missing SUPERBAND marker');
+if (!indexHtml.includes('BADGE MANAGER')) {
+  console.warn('Unexpected index.html — missing BADGE MANAGER marker');
 }
 
 console.log(`Wrote ${outdir}/ (${result.outputs.length} outputs + .nojekyll + 404.html)`);

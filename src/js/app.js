@@ -2,6 +2,7 @@ import { SuperBandClient, FileType, FunctionType } from './client.js';
 import { prepareFileForBadge, formatBytes, DEFAULT_DIAL } from './image.js';
 import { inspectRu50, looksLikeBg02 } from './ru50.js';
 import { REPO_URL } from './protocol.js';
+import { resolveBadgeProfile, imageMatchesBadge } from './device-profile.js';
 import { bindAdvanced } from './advanced.js';
 
 const $ = (s) => document.querySelector(s);
@@ -10,6 +11,7 @@ const $$ = (s) => [...document.querySelectorAll(s)];
 const client = new SuperBandClient();
 let prepared = null;
 let transferring = false;
+let activeProfileKey = null;
 
 function setPill(el, text, state = '') {
   el.textContent = text;
@@ -20,9 +22,14 @@ function setPill(el, text, state = '') {
 function syncConnectionChrome() {
   const n = client.sessionCount;
   const on = n > 0 && client.connected;
-  $$('[data-need-conn]').forEach((b) => {
+  $('[data-need-conn]').forEach((b) => {
     b.disabled = !on;
   });
+  // The upstream OTA firmware presets target BJ-1/DG01, not BG02 V1.5.
+  // Keep the BG02 flash actions disabled even after session refreshes.
+  if (resolveBadgeProfile(client.getSnapshot()).bg02) {
+    $('#btnOtaFlash').disabled = true;
+  }
 
   // Always allow adding another device while Web Bluetooth works
   $('#btnConnect').hidden = false;
@@ -136,8 +143,68 @@ function dash(v) {
   return v == null || v === '' ? '—' : String(v);
 }
 
+/**
+ * Update device-dependent defaults only when identity or reported display
+ * geometry changes; preserve manual size changes for other badge families.
+ * Never mark a previously prepared image compatible with a different badge.
+ */
+function applyBadgeProfile(snapshot = client.getSnapshot()) {
+  const profile = resolveBadgeProfile(snapshot);
+  const key = [
+    snapshot?.sessionId || '-', profile.id, profile.width, profile.height,
+    profile.format,
+  ].join('|');
+  const changed = key !== activeProfileKey;
+  if (changed) {
+    activeProfileKey = key;
+    prepared = null;
+    $('#dialW').value = String(profile.width);
+    $('#dialH').value = String(profile.height);
+  }
+
+  $('#dialW').disabled = profile.fixedSize;
+  $('#dialH').disabled = profile.fixedSize;
+  $('#dialWidthOption').title = profile.fixedSize ? 'Fixed for the BG02 display' : '';
+  $('#dialHeightOption').title = profile.fixedSize ? 'Fixed for the BG02 display' : '';
+  $('#imageInput').accept = profile.fileAccept;
+  $('#btnPickImage').textContent = profile.chooseLabel;
+  $('#imageFormatHelp').textContent = profile.formatLabel;
+  $('#imageInputHint').textContent = profile.formatHelp;
+  $('#mediaLibrarySection').hidden = !profile.showMediaLibrary;
+  $('#roleOptions').hidden = !profile.showBajiOptions;
+  $('#allocMediaOption').hidden = !profile.showBajiOptions;
+  $('#roundMaskOption').hidden = profile.bg02;
+  $('#btnPushAll').hidden = profile.bg02 || client.sessionCount < 2;
+  $('#btnPush').textContent = profile.bg02 ? 'Upload RU50' : 'Upload to badge';
+  $('#otaPreset').disabled = profile.bg02;
+  $('#btnOtaPrepare').disabled = profile.bg02;
+  $('#otaCatVersion').disabled = profile.bg02;
+  $('#otaCatName').disabled = profile.bg02;
+  $('#btnOtaProbeCatalog').disabled = profile.bg02;
+
+  // The presets in Advanced are for BJ-1/DG01, not our LJ733 V1.5.
+  // Do not accidentally offer unrelated firmware flashing as a BG02 action.
+  $('#btnOtaFlash').disabled = profile.bg02 || !client.connected;
+  $('#btnOtaFlashPicker').disabled = profile.bg02;
+  $('#otaConfirmRisk').disabled = profile.bg02;
+  if (changed && profile.bg02) $('#otaConfirmRisk').checked = false;
+  if (changed) {
+    const file = $('#imageInput').files?.[0];
+    if (file) {
+      void rebuildPreview();
+    } else {
+      $('#dialPreview').hidden = true;
+      $('#dialPlaceholder').hidden = false;
+      $('#dialPlaceholder').textContent = 'Choose an image to preview';
+      $('#imageMeta').textContent = 'No image selected.';
+    }
+  }
+  updatePushChecklist();
+}
+
 function renderSnapshot(snap) {
   const s = snap || client.getSnapshot();
+  applyBadgeProfile(s);
   const battery = s.battery == null ? '—' : `${s.battery}%`;
 
   const fields = {
@@ -174,12 +241,6 @@ function renderSnapshot(snap) {
 
   if (s.protocolMode === 'fitpro') {
     $('#mediaIdPill').textContent = 'FitPro dial31';
-    if (s.dialWidth && s.dialHeight) {
-      const w = $('#dialW');
-      const h = $('#dialH');
-      if (w && Number(w.value) !== s.dialWidth) w.value = String(s.dialWidth);
-      if (h && Number(h.value) !== s.dialHeight) h.value = String(s.dialHeight);
-    }
   } else if (s.mediaId != null) {
     $('#mediaIdPill').textContent = `Media ID ${s.mediaId}`;
   } else if (!s.connected) {
@@ -197,9 +258,14 @@ function updatePushChecklist() {
     if (!li) continue;
     li.dataset.ok = ok ? '1' : '0';
   }
-  const canPush = connected && imageReady && idle;
+  const profile = resolveBadgeProfile(client.getSnapshot());
+  const compatible = imageMatchesBadge(prepared, profile, client.getSnapshot());
+  const canPush = connected && imageReady && compatible && idle;
   $('#btnPush').disabled = !canPush;
-  $('#btnPushAll').disabled = !(client.sessionCount >= 2 && imageReady && idle);
+  $('#btnPushAll').disabled = !(
+    client.sessionCount >= 2 && canPush && !profile.bg02 &&
+    prepared?.format !== 'ru50'
+  );
 }
 
 function renderMediaList(items) {
@@ -257,8 +323,7 @@ async function connect(acceptAll) {
     } else if (snap.protocolMode === 'fitpro') {
       log({ msg: 'FitPro badge — media library skipped (use Push for dial31 upload)', level: 'info' });
     }
-    // Re-encode for protocol (FitPro RGB565 vs Baji/alg4 JPEG).
-    if ($('#imageInput').files?.length) await rebuildPreview();
+    // applyBadgeProfile() already rebuilds the selected image on identity change.
   } catch (e) {
     syncConnectionChrome();
     renderDeviceChips();
@@ -274,54 +339,79 @@ async function rebuildPreview() {
   const file = $('#imageInput').files?.[0];
   if (!file) {
     prepared = null;
+    $('#imageMeta').textContent = 'No image selected.';
     updatePushChecklist();
     return;
   }
+
+  // Validate the currently selected file against the *active* badge. The
+  // HTML accept filter is advisory; drag/drop and prior selections bypass it.
+  const snap = client.getSnapshot();
+  const profile = resolveBadgeProfile(snap);
+  prepared = null;
+  updatePushChecklist();
   try {
     const isRu50 = file.name.toLowerCase().endsWith('.ru50');
+    if (profile.bg02 && !isRu50) {
+      $('#dialPreview').hidden = true;
+      $('#dialPlaceholder').hidden = false;
+      $('#dialPlaceholder').textContent = 'Convert to RU50 first';
+      $('#imageMeta').textContent =
+        `${file.name} is not a BG02 RU50 image. JPEG/PNG → RGB565 displays black on this badge; use the offline RU50 encoder.`;
+      log({ msg: 'BG02: rejected JPG/PNG to prevent incorrect RGB565 upload; use an encoded .ru50 file.', level: 'warn' });
+      return;
+    }
+    if (!profile.bg02 && isRu50) {
+      throw new Error('RU50 is only supported for a confirmed BG02/LJ733 device');
+    }
+    let next;
     if (isRu50) {
-      // Reuse the independently reverse-engineered JieLi encoder offline.
-      // Do NOT let the canvas RGB565 encoder silently mangle this binary.
+      // Import an actual pre-encoded ETC2 texture; do not repack as RGB565.
       const bytes = new Uint8Array(await file.arrayBuffer());
       const meta = inspectRu50(bytes);
-      prepared = {
+      next = {
         blob: file, bytes, width: meta.width, height: meta.height,
         format: 'ru50', previewUrl: null,
       };
-      $('#dialW').value = String(meta.width);
-      $('#dialH').value = String(meta.height);
       $('#dialPreview').hidden = true;
       $('#dialPlaceholder').hidden = false;
-      $('#dialPlaceholder').textContent = 'RU50 / ETC2 ready (no browser preview)';
+      $('#dialPlaceholder').textContent = 'RU50 / ETC2 ready';
       $('#imageMeta').textContent =
-        `${file.name} → ${meta.width}×${meta.height} BG02 RU50/ETC2 · ${formatBytes(bytes.length)} · EXPERIMENTAL`;
-      log({ msg: `BG02 RU50 validated: ${bytes.length} bytes, payload=${meta.payloadLength}, flags=0x${meta.flags.toString(16)}` });
+        `${file.name} → ${meta.width}×${meta.height} RU50/ETC2 · ${formatBytes(bytes.length)}`;
     } else {
-      // Other badges keep their existing RGB565/JPEG behavior unchanged.
-      const snap = client.getSnapshot();
-      const useJpeg = snap.protocolMode === 'baji' || snap.dialAlgorithm === 4;
-      prepared = await prepareFileForBadge(file, {
-        width: Number($('#dialW').value) || DEFAULT_DIAL.width,
-        height: Number($('#dialH').value) || DEFAULT_DIAL.height,
+      next = await prepareFileForBadge(file, {
+        width: Number($('#dialW').value) || profile.width,
+        height: Number($('#dialH').value) || profile.height,
         quality: 0.5,
         round: $('#roundMask').checked,
-        format: useJpeg ? 'jpeg444' : 'rgb565',
+        format: profile.format,
       });
       const img = $('#dialPreview');
-      img.src = prepared.previewUrl;
+      img.src = next.previewUrl;
       img.hidden = false;
       $('#dialPlaceholder').hidden = true;
       $('#dial').classList.toggle('round', $('#roundMask').checked);
-      const fmtLabel = prepared.format === 'jpeg444' ? 'JPEG 4:4:4' : 'RGB565';
+      const fmtLabel = next.format === 'jpeg444' ? 'JPEG 4:4:4' : 'RGB565';
       $('#imageMeta').textContent =
-        `${file.name} → ${prepared.width}×${prepared.height} ${fmtLabel} · ${formatBytes(prepared.bytes.length)}`;
+        `${file.name} → ${next.width}×${next.height} ${fmtLabel} · ${formatBytes(next.bytes.length)}`;
     }
-    updatePushChecklist();
+    // A slower image conversion must not apply after a badge switch.
+    const now = client.getSnapshot();
+    const current = resolveBadgeProfile(now);
+    if (snap.sessionId !== now.sessionId || current.format !== next.format) {
+      prepared = null;
+      $('#imageMeta').textContent = 'Badge changed while preparing image. Select the image again.';
+    } else {
+      prepared = next;
+      if (isRu50) log({ msg: `BG02 RU50 validated: ${next.bytes.length} bytes` });
+    }
   } catch (e) {
     prepared = null;
-    updatePushChecklist();
+    $('#imageMeta').textContent = `Unable to prepare image: ${e.message}`;
     toast(e.message, 'err');
     log({ msg: e.message, level: 'err' });
+  } finally {
+    updatePushChecklist();
   }
 }
 
@@ -341,6 +431,11 @@ async function pushImage() {
       return;
     }
     log({ msg: 'EXPERIMENTAL BG02 RU50 transfer; ACK success does not guarantee image renders', level: 'warn' });
+  }
+  const activeSnapshot = client.getSnapshot();
+  if (!imageMatchesBadge(prepared, resolveBadgeProfile(activeSnapshot), activeSnapshot)) {
+    toast('Image format does not match this badge. Select a compatible image.', 'err');
+    return;
   }
   const bar = $('#pushBar');
   const wrap = $('#pushProgress');
@@ -597,7 +692,7 @@ function applyVersionLabel(version, builtAt = null) {
   a.href = REPO_URL;
   a.target = '_blank';
   a.rel = 'noopener noreferrer';
-  a.textContent = `SuperBand v${version}`;
+  a.textContent = `Badge Manager v${version}`;
   el.appendChild(a);
   if (builtAt) {
     el.appendChild(document.createTextNode(` · ${builtAt}`));
@@ -626,6 +721,6 @@ initBuildMeta();
 syncConnectionChrome();
 updatePushChecklist();
 log({
-  msg: 'SuperBand manager ready. Connect one or more badges (each Add opens the picker). Advanced tab: OTA / GATT / probes.',
+  msg: 'Badge Manager ready. Connect a badge to select its display dimensions and image format.',
   level: 'info',
 });

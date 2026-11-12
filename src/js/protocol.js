@@ -20,7 +20,7 @@ export const GATT = {
 };
 
 /** Official project repository (shown in the manager UI). */
-export const REPO_URL = 'https://github.com/T-REX-XP/superband-web-client-rnd';
+export const REPO_URL = 'https://github.com/sarthax/superband-web-client-rnd-BG02';
 
 export const PROTOCOL = {
   START: 0xcd,
