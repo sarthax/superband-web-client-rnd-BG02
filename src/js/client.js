@@ -91,7 +91,7 @@ class BadgeSession {
 
   /** Restrict read-only new probes to the exact BG02 hardware seen in the Android trace. */
   get isKnownBg02V15() {
-    return /^LJ733_MB_V1\\.5$/i.test(this.disInfo?.hardware || '') &&
+    return /^LJ733_MB_V1\.5$/i.test(this.disInfo?.hardware || '') &&
       /LJ733/i.test(this.name || '');
   }
 
