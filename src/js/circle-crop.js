@@ -84,6 +84,25 @@ export class CircleCropEditor {
     this.render();
   }
 
+  snapshot() {
+    return { zoom:this.zoom, offsetX:this.offsetX, offsetY:this.offsetY };
+  }
+
+  restore(snapshot) {
+    if (!this.image) throw new Error('Load project image before restoring crop');
+    if (!snapshot || !Number.isFinite(snapshot.zoom) ||
+        !Number.isFinite(snapshot.offsetX) ||
+        !Number.isFinite(snapshot.offsetY) ||
+        snapshot.zoom < PHOTO_MIN_ZOOM || snapshot.zoom > PHOTO_MAX_ZOOM) {
+      throw new Error('Invalid saved picture crop');
+    }
+    this.zoom=snapshot.zoom;
+    this.offsetX=snapshot.offsetX;
+    this.offsetY=snapshot.offsetY;
+    this.zoomInput.value=String(Math.round(this.zoom*100));
+    this.render(); // clamp geometry to actual source image dimensions
+  }
+
   geometry() {
     if(!this.image)throw new Error('Choose a photo first');
     return cropGeometry(
