@@ -4,6 +4,7 @@ import { planTrimmedVideo, planGifStoryboard } from './video-timeline.js';
 import { formatBytes } from './image.js';
 import { BG02_VIDEO } from './video-avi.js';
 import { resolveBadgeProfile } from './device-profile.js';
+import { AviComparisonPreview } from './video-preview.js';
 
 export function bindVideo({ client, log, toast, $ }) {
   const els = {
@@ -46,6 +47,19 @@ export function bindVideo({ client, log, toast, $ }) {
     bar: $('#videoBar'),
   };
 
+  const comparison = new AviComparisonPreview({
+    root: $('#videoCompare'),
+    sourceCanvas: $('#videoCompareSource'),
+    encodedCanvas: $('#videoCompareEncoded'),
+    sourceCaption: $('#videoCompareSourceCaption'),
+    play: $('#videoComparePlay'),
+    previous: $('#videoComparePrevious'),
+    next: $('#videoCompareNext'),
+    seek: $('#videoCompareSeek'),
+    position: $('#videoComparePosition'),
+    description: $('#videoCompareDescription'),
+  });
+
   let source = null;
   let converted = null;
   let pending = null;
@@ -70,6 +84,7 @@ export function bindVideo({ client, log, toast, $ }) {
   };
 
   function clearOutput() {
+    comparison.reset();
     converted = null;
     els.outputFrame.hidden = true;
     els.outputFrame.removeAttribute('src');
@@ -385,8 +400,21 @@ export function bindVideo({ client, log, toast, $ }) {
         onProgress: ({ percent, frame, total }) =>
           progress(percent, 'Encoding frame ' + frame + ' / ' + total),
       });
-      if (current !== generation || controller.signal.aborted) return;
+      if (current !== generation || controller.signal.aborted) {
+        for (const frame of result.referenceFrames || []) frame.close();
+        return;
+      }
       converted = result;
+      // Decode real JPEGs from the completed AVI (not the browser's native
+      // AVI video decoder) and place them beside the exact sampled source.
+      // Preview problems must not turn a correctly encoded file into a failure.
+      try {
+        comparison.setResult(result);
+      } catch (e) {
+        for (const frame of result.referenceFrames || []) frame.close();
+        result.referenceFrames = null;
+        log({ msg: 'AVI side-by-side preview unavailable: ' + e.message, level: 'warn' });
+      }
       els.outputFrame.src = result.thumbnail;
       els.outputFrame.hidden = false;
       els.exactSize.textContent = 'AVI: ' + formatBytes(result.bytes.length) +
