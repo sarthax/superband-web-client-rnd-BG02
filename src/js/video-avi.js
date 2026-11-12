@@ -10,6 +10,7 @@ export const BG02_VIDEO = Object.freeze({
   WIDTH: 240,
   HEIGHT: 240,
   FPS: 3,
+  EXPERIMENTAL_FPS: Object.freeze([2, 1, 0.5]),
   VERIFIED_SECONDS: 5,
   MAX_EXPERIMENTAL_SECONDS: 30,
   ALLOCATION_HINT_BYTES: 8192, // inferred from one 29,904B file using 32KiB
@@ -21,6 +22,14 @@ const fourCC = (bytes, at, text) => {
 const ascii = (b, at) => String.fromCharCode(...b.subarray(at, at + 4));
 const u16 = (v, at, n) => v.setUint16(at, n, true);
 const u32 = (v, at, n) => v.setUint32(at, n >>> 0, true);
+
+export function bg02AviTimebase(fps) {
+  // Use exact rational values, never write fractional values to AVI DWORDs.
+  // The only recovered SuperBand AVI used 3fps. Lower rates are unverified.
+  if (fps === 0.5) return { rate: 1, scale: 2 };
+  if (fps === 1 || fps === 2 || fps === 3) return { rate: fps, scale: 1 };
+  throw new Error('BG02 supports 3fps format; 2, 1 and 0.5fps are experimental');
+}
 
 function concat(parts) {
   const count = parts.reduce((sum, p) => sum + p.length, 0);
@@ -69,8 +78,9 @@ function streamHeader({ width, height, fps, frames, maxFrame }) {
   u16(v, 12, 0);
   u16(v, 14, 0);
   u32(v, 16, 0);
-  u32(v, 20, 1); // dwScale
-  u32(v, 24, fps); // dwRate
+  const { rate, scale } = bg02AviTimebase(fps);
+  u32(v, 20, scale); // dwScale
+  u32(v, 24, rate); // dwRate
   u32(v, 28, 0);
   u32(v, 32, frames);
   u32(v, 36, maxFrame);
@@ -103,10 +113,10 @@ export function muxBg02MjpegAvi(jpegFrames, {
   fps = BG02_VIDEO.FPS,
 } = {}) {
   if (!Number.isInteger(width) || width !== 240 || height !== 240 ||
-      !Number.isInteger(fps) || fps !== 3 ||
+      ![3, 2, 1, 0.5].includes(fps) ||
       !Array.isArray(jpegFrames) || jpegFrames.length < 1 ||
-      jpegFrames.length > BG02_VIDEO.MAX_EXPERIMENTAL_SECONDS * fps) {
-    throw new Error('BG02 AVI requires 240x240 JPEG, 3 fps, 1–90 frames');
+      jpegFrames.length / fps > BG02_VIDEO.MAX_EXPERIMENTAL_SECONDS) {
+    throw new Error('BG02 AVI requires 240x240 MJPEG, 0.5/1/2/3fps, maximum 30 seconds');
   }
   let maxFrame = 0;
   for (const f of jpegFrames) {
@@ -185,9 +195,11 @@ export function inspectBg02MjpegAvi(input) {
     }
   };
   parseChunks(12, Math.min(b.length, read(4) + 8));
-  if (width !== 240 || height !== 240 || fps !== 3 || !mjpegStream ||
-      foundFrames < 1 || (declaredFrames && declaredFrames !== foundFrames)) {
-    throw new Error('Expected 240x240, 3 fps MJPEG AVI with complete frames');
+  if (width !== 240 || height !== 240 || ![0.5, 1, 2, 3].includes(fps) ||
+      !mjpegStream || foundFrames < 1 ||
+      foundFrames / fps > BG02_VIDEO.MAX_EXPERIMENTAL_SECONDS ||
+      (declaredFrames && declaredFrames !== foundFrames)) {
+    throw new Error('Expected 240x240 MJPEG AVI (0.5/1/2/3fps, up to 30s)');
   }
   return {
     width, height, fps,
