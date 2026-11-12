@@ -207,6 +207,56 @@ export function bindVideo({ client, log, toast, $ }) {
     }
   }
 
+  /** Show only 24 original GIF frames at a time; keep selection across pages. */
+  async function renderFramePage() {
+    const original = source;
+    const token = ++thumbnailEpoch;
+    if (original?.kind !== 'gif') return;
+    const total = original.ends.length;
+    const pages = Math.ceil(total / FRAMES_PER_PAGE);
+    framePage = Math.max(0, Math.min(framePage, pages - 1));
+    const from = framePage * FRAMES_PER_PAGE;
+    const to = Math.min(total, from + FRAMES_PER_PAGE);
+    els.gifPage.textContent = 'Frames ' + (from + 1) + '–' + to +
+      ' of ' + total + ' (page ' + (framePage + 1) + '/' + pages + ')';
+    els.gifFrameGrid.replaceChildren();
+    refresh();
+    for (let i = from; i < to; i++) {
+      let poster;
+      try {
+        poster = await gifFrameThumbnail(original, i);
+      } catch (e) {
+        if (token === thumbnailEpoch) {
+          log({ msg: 'GIF frame #' + (i + 1) + ': ' + e.message, level: 'warn' });
+        }
+        continue;
+      }
+      if (token !== thumbnailEpoch || source !== original) return;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'gif-frame-card';
+      button.setAttribute('aria-pressed', String(selectedGifFrames.has(i)));
+      const startTime = i === 0 ? 0 : original.ends[i - 1] / 1000;
+      button.title = 'GIF source frame ' + (i + 1) + ' at ' + fmtTime(startTime);
+      const img = document.createElement('img');
+      img.alt = '';
+      img.src = poster;
+      img.loading = 'lazy';
+      const meta = document.createElement('span');
+      meta.textContent = '#' + (i + 1) + ' · ' + fmtTime(startTime);
+      button.append(img, meta);
+      button.addEventListener('click', () => {
+        if (source !== original || working || uploading || client.anyTransferring) return;
+        if (selectedGifFrames.has(i)) selectedGifFrames.delete(i);
+        else selectedGifFrames.add(i);
+        els.gifUseFrames.checked = true;
+        button.setAttribute('aria-pressed', String(selectedGifFrames.has(i)));
+        invalidated();
+      });
+      els.gifFrameGrid.appendChild(button);
+    }
+  }
+
   function setPreset() {
     // Preset caps output duration: do not alter the selected source interval.
     if (source) invalidated();
@@ -404,6 +454,27 @@ export function bindVideo({ client, log, toast, $ }) {
     el.addEventListener('change', invalidated);
   }
   els.seconds.addEventListener('change', setPreset);
+  els.gifUseFrames.addEventListener('change', invalidated);
+  els.gifHold.addEventListener('change', invalidated);
+  els.gifClear.addEventListener('click', () => {
+    if (!source || source.kind !== 'gif' || working || uploading) return;
+    selectedGifFrames.clear();
+    els.gifFrameGrid.querySelectorAll('.gif-frame-card').forEach(
+      (button) => button.setAttribute('aria-pressed', 'false'),
+    );
+    invalidated();
+  });
+  els.gifPrev.addEventListener('click', () => {
+    if (framePage > 0) { framePage--; void renderFramePage(); }
+  });
+  els.gifNext.addEventListener('click', () => {
+    if (source?.kind === 'gif' &&
+        (framePage + 1) * FRAMES_PER_PAGE < source.ends.length) {
+      framePage++;
+      void renderFramePage();
+    }
+  });
+
   els.start.addEventListener('input', () => {
     if (!source) return;
     const a = Number(els.start.value), b = Number(els.end.value);
