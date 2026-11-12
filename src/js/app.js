@@ -915,21 +915,25 @@ async function pushImage() {
     ? activeSnapshot.freeStorage : null;
   try {
     let uploadBytes = prepared.bytes;
-    if (activeProfile.bg02 && prepared.format === 'jpeg444') {
+    if (activeProfile.bg02 && ['jpeg444','ru50'].includes(prepared.format)) {
+      // Read immediately before the actual upload, not just when connecting.
+      // Both codecs should report a meaningful pre/post storage delta.
       const storage = await client.refreshFitProStorage({ timeoutMs: 5000 });
       beforePictureBytes = storage.reportedBytes;
       const after = client.getSnapshot();
+      const verified = resolveBadgeProfile(after);
       if (after.sessionId !== activeSnapshot.sessionId ||
-          !resolveBadgeProfile(after).jpegExperimentSupported) {
-        throw new Error('Badge identity or JPEG capability changed during preflight');
+          !verified.bg02 || (prepared.format === 'jpeg444' &&
+          !verified.jpegExperimentSupported)) {
+        throw new Error('Badge identity or codec capability changed during preflight');
       }
       const estimate = estimatePictureStorage({
-        bg02: true, format: 'jpeg444',
+        bg02: true, format: prepared.format,
         encodedBytes: uploadBytes.length,
         availableBytes: storage.reportedBytes,
       });
       if (estimate?.fits === false) {
-        throw new Error('JPEG needs ~' +
+        throw new Error('The picture needs ~' +
           formatBytes(estimate.allocationHint) +
           ' but only ~' + formatBytes(storage.reportedBytes) +
           ' is reported free. No bytes were uploaded.');
