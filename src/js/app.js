@@ -5,6 +5,7 @@ import { CircleCropEditor } from './circle-crop.js';
 import { REPO_URL } from './protocol.js';
 import { resolveBadgeProfile, imageMatchesBadge } from './device-profile.js';
 import { bindAdvanced } from './advanced.js';
+import { bindVideo } from './video-ui.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -14,6 +15,7 @@ let prepared = null;
 let transferring = false;
 let activeProfileKey = null;
 let previewGeneration = 0;
+let videoController = null;
 const cropper = new CircleCropEditor({
   canvas: $('#cropCanvas'),
   zoomInput: $('#cropZoom'),
@@ -236,6 +238,7 @@ function applyBadgeProfile(snapshot = client.getSnapshot()) {
     }
   }
   updatePushChecklist();
+  videoController?.update(snapshot);
 }
 
 function renderSnapshot(snap) {
@@ -736,6 +739,7 @@ function bind() {
   client.addEventListener('sessions', () => {
     syncConnectionChrome();
     renderDeviceChips();
+    videoController?.update();
   });
   client.addEventListener('connection', (e) => {
     syncConnectionChrome();
@@ -829,6 +833,7 @@ async function initBuildMeta() {
 }
 
 bind();
+videoController = bindVideo({ client, log, toast, $ });
 bindAdvanced({ client, log, toast, $ });
 initSupport();
 initBuildMeta();
