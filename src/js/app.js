@@ -138,6 +138,7 @@ async function comparePicture() {
       transferring || client.anyTransferring) return;
   const file = $('#imageInput').files?.[0];
   const before = client.getSnapshot();
+  invalidatePictureComparison('Encoding the latest crop…');
   const request = ++pictureComparisonGeneration;
   const jpegQuality = Number($('#pictureJpegQuality').value);
   pictureComparing = true;
@@ -702,7 +703,7 @@ async function rebuildPreview() {
         `${file.name} → 240×240 RU50/ETC2 · ${formatBytes(next.bytes.length)}`;
     } else if (profile.bg02) {
       $('#imageMeta').textContent =
-        `${file.name} → round 240×240 crop · converted automatically when uploaded`;
+        `${file.name} → round 240×240 crop · compare ETC2 and JPEG before upload`;
     } else {
       $('#dialPreview').src = next.previewUrl;
       $('#dialPreview').hidden = false;
@@ -738,17 +739,38 @@ async function pushImage() {
     setUploadStatus('Choose a picture first.', 'err');
     return;
   }
+  const activeSnapshot = client.getSnapshot();
+  const activeProfile = resolveBadgeProfile(activeSnapshot);
+  if (activeProfile.bg02 && prepared.source === 'crop') {
+    setUploadStatus('Convert & compare the crop before uploading.', 'err');
+    return;
+  }
+  if (activeProfile.bg02 && prepared.source === 'comparison' &&
+      (!pictureComparison || !pictureComparison[pictureCodec() === 'jpeg444' ? 'jpeg' : 'ru50'] ||
+       prepared.format !== pictureCodec())) {
+    setUploadStatus('Comparison no longer matches the selected format. Convert again.', 'err');
+    return;
+  }
   if (prepared.format === 'ru50') {
-    const snap = client.getSnapshot();
-    if (snap.protocolMode !== 'fitpro' || !looksLikeBg02(snap)) {
+    if (activeSnapshot.protocolMode !== 'fitpro' || !looksLikeBg02(activeSnapshot)) {
       toast('RU50 requires a confirmed BG02/LJ733 FitPro badge', 'err');
       setUploadStatus('This picture format does not match the connected badge.', 'err');
       return;
     }
     log({ msg: 'BG02 RU50/ETC2 image transfer', level: 'info' });
   }
-  const activeSnapshot = client.getSnapshot();
-  if (!imageMatchesBadge(prepared, resolveBadgeProfile(activeSnapshot), activeSnapshot)) {
+  if (activeProfile.bg02 && prepared.format === 'jpeg444') {
+    if (!activeProfile.jpegExperimentSupported) {
+      setUploadStatus('JPEG upload requires BG02 V1.5 with algorithm 4 reported.', 'err');
+      return;
+    }
+    if (!window.confirm(
+      'EXPERIMENTAL: upload the reviewed 240×240 JPEG 4:4:4 using Dial31 type 2? ' +
+      'A successful BLE ACK will not prove it displays or is stored correctly. ' +
+      'The current badge picture may change. Continue?'
+    )) return;
+  }
+  if (!imageMatchesBadge(prepared, activeProfile, activeSnapshot)) {
     toast('Image format does not match this badge. Select a compatible image.', 'err');
     setUploadStatus('This picture belongs to a different badge. Choose it again.', 'err');
     return;
@@ -766,6 +788,9 @@ async function pushImage() {
     if (prepared.source === 'crop') {
       log({ msg: 'Cropping and converting the picture for BG02…', level:'info' });
       setUploadStatus('Converting your picture for BG02…', 'busy');
+      if (activeProfile.bg02) {
+        throw new Error('BG02 source pictures must be compared before uploading');
+      }
       uploadBytes = await encodeImageDataRu50(cropper.getImageData(240));
       const snapshot = client.getSnapshot();
       if (!client.connected || snapshot.sessionId !== activeSnapshot.sessionId ||
@@ -776,21 +801,28 @@ async function pushImage() {
       log({ msg: `Image encoded: ${formatBytes(uploadBytes.length)} RU50/ETC2`, level:'ok' });
     }
     const functionType = Number($('#functionType').value) || FunctionType.BACKGROUND;
-    const result = await client.transferFile(uploadBytes, {
-      fileType: FileType.IMAGE,
-      functionType,
-      allocateId: $('#allocMedia').checked,
-      onProgress: (pct) => {
-        const percent = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
-        bar.style.width = `${percent}%`;
-        wrap.setAttribute('aria-valuenow', String(percent));
-        setUploadStatus(`Sending picture… ${percent}%`, 'busy');
-      },
-    });
+    const onProgress = (pct) => {
+      const percent = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+      bar.style.width = `${percent}%`;
+      wrap.setAttribute('aria-valuenow', String(percent));
+      setUploadStatus(`Sending picture… ${percent}%`, 'busy');
+    };
+    // Dedicated JPEG method validates the exact identity, algorithm=4 and
+    // 240x240 baseline 4:4:4 before any Bluetooth write.
+    const result = activeProfile.bg02 && prepared.format === 'jpeg444'
+      ? await client.transferBg02Jpeg(uploadBytes, { onProgress })
+      : await client.transferFile(uploadBytes, {
+          fileType: FileType.IMAGE,
+          functionType,
+          allocateId: $('#allocMedia').checked,
+          onProgress,
+        });
     const via = result.path === 'fitpro-dial31' ? 'dial31' : 'baji';
-    setUploadStatus(result.verified === false
-      ? 'Transfer finished, but verification is unclear. Check the badge screen.'
-      : 'Transfer acknowledged. Check the picture on the badge screen.', 'ok');
+    setUploadStatus(activeProfile.bg02 && prepared.format === 'jpeg444'
+      ? 'JPEG transfer acknowledged. Confirm that the badge displays and retains it correctly.'
+      : result.verified === false
+        ? 'Transfer finished, but verification is unclear. Check the badge screen.'
+        : 'Transfer acknowledged. Check the picture on the badge screen.', 'ok');
     toast(
       result.verified === false
         ? 'Uploaded (verify unclear)'
@@ -831,8 +863,9 @@ async function pushAll() {
     toast('Choose an image first', 'err');
     return;
   }
-  if (prepared.format === 'ru50') {
-    toast('Experimental RU50 is limited to one verified BG02 at a time', 'err');
+  if (prepared.format === 'ru50' || 
+      (prepared.format === 'jpeg444' && resolveBadgeProfile(client.getSnapshot()).bg02)) {
+    toast('Experimental BG02 image formats are limited to one verified badge at a time', 'err');
     return;
   }
   const bar = $('#pushBar');
@@ -947,6 +980,12 @@ function bind() {
   $('#btnPair').addEventListener('click', () =>
     client.pair().catch((e) => toast(e.message, 'err')),
   );
+  $('#pictureCodec').addEventListener('change', selectPictureCodec);
+  $('#pictureJpegQuality').addEventListener('input', () => {
+    $('#pictureJpegQualityLabel').textContent = $('#pictureJpegQuality').value;
+    invalidatePictureComparison('JPEG quality changed. Reconvert to preview new bytes.');
+  });
+  $('#pictureCompareBuild').addEventListener('click', () => void comparePicture());
   $('#btnPickImage').addEventListener('click', () => $('#imageInput').click());
   $('#imageInput').addEventListener('change', () => rebuildPreview());
   $('#dialW').addEventListener('change', () => rebuildPreview());
