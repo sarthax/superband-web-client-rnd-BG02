@@ -46,8 +46,9 @@ test('Qualified BG02 V1.5 algorithm 4 prefers JPEG without changing other device
     {...verified, protocolMode: 'baji'},
   ]) {
     const result = resolveBadgeProfile(unqualified);
-    assert.notEqual(result.format, 'jpeg444',
-      'unqualified BG02 must not silently default to JPEG');
+    assert.equal(result.jpegExperimentSupported, false,
+      'unqualified board must never use the BG02-specific JPEG path');
+    if (result.bg02) assert.equal(result.format, 'ru50');
   }
 });
 
