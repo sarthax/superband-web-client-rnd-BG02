@@ -154,8 +154,8 @@
                   <img id="dialPreview" alt="" hidden />
                 </div>
                 <div class="row">
-                  <input class="file-input" id="imageInput" type="file" accept="image/*" />
-                  <button type="button" id="btnPickImage">Choose image</button>
+                  <input class="file-input" id="imageInput" type="file" accept="image/*,.ru50" />
+                  <button type="button" id="btnPickImage">Choose image / .ru50</button>
                   <button class="primary" data-need-conn disabled id="btnPush">Push to active</button>
                   <button data-need-conn disabled id="btnPushAll" hidden>Push to all</button>
                 </div>
@@ -185,6 +185,7 @@
                 ><input type="checkbox" id="allocMedia" checked /> Allocate media ID</label
               >
               <p class="lead" id="imageMeta">No image selected.</p>
+              <p class="lead">Experimental BG02: convert a PNG to a .ru50 file using tools/encode_bg02_ru50.py and select that file. Other badges retain their RGB565/JPEG paths. This is not a firmware update.</p>
               <div class="progress" id="pushProgress" hidden><i id="pushBar"></i></div>
             </div>
           </section>
