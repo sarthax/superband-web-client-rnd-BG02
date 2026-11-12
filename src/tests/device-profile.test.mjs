@@ -13,7 +13,7 @@ test('BG02 V1.5 always defaults to 240x240 RU50 without querying dial-info', () 
   assert.equal(profile.format, 'ru50');
   assert.equal(profile.fileAccept, 'image/*,.ru50');
   assert.equal(profile.chooseLabel, 'Choose photo');
-  assert.match(profile.formatHelp, /converted automatically/);
+  assert.match(profile.formatHelp, /Optimize picture/);
   assert.equal(profile.fixedSize, true);
   assert.equal(profile.showMediaLibrary, false);
   assert.equal(profile.showBajiOptions, false);
@@ -26,6 +26,30 @@ test('BG02 detected from hardware even when advertised name is blank', () => {
   assert.equal(profile.id, 'bg02');
   assert.equal(profile.width, 240);
   assert.equal(profile.height, 240);
+});
+
+test('Qualified BG02 V1.5 algorithm 4 prefers JPEG without changing other device defaults', () => {
+  const verified = {
+    name: 'BG02', firmware: 'V35922', hardware: 'LJ733_MB_V1.5',
+    protocolMode: 'fitpro', dialAlgorithm: 4,
+  };
+  const profile = resolveBadgeProfile(verified);
+  assert.equal(profile.format, 'jpeg444');
+  assert.equal(profile.jpegExperimentSupported, true);
+  assert.equal(imageMatchesBadge({format:'jpeg444',width:240,height:240}, profile, verified), true);
+  assert.equal(imageMatchesBadge({format:'ru50',width:240,height:240}, profile, verified), true);
+
+  for (const unqualified of [
+    {...verified, dialAlgorithm: null},
+    {...verified, dialAlgorithm: 0},
+    {...verified, hardware: 'LJ733_MB_V1.1'},
+    {...verified, protocolMode: 'baji'},
+  ]) {
+    const result = resolveBadgeProfile(unqualified);
+    assert.equal(result.jpegExperimentSupported, false,
+      'unqualified board must never use the BG02-specific JPEG path');
+    if (result.bg02) assert.equal(result.format, 'ru50');
+  }
 });
 
 test('BJ/DG generic FitPro retains RGB565 and manual dimensions', () => {

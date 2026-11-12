@@ -10,7 +10,8 @@ import {
   USB_HINT,
   SECURITY_FINDINGS,
 } from './ota-catalog.js';
-import { findJieliOtaChars, listGattSummary, runJieliOta, JIELI_OTA } from './jieli-ota.js';
+import { listGattSummary, JIELI_OTA } from './jieli-ota.js';
+import { assertBrowserOtaFlashQualified, BROWSER_OTA_BLOCK_REASON } from './ota-safety.js';
 import { GATT } from './protocol.js';
 import { formatBytes } from './image.js';
 
@@ -42,7 +43,7 @@ export function bindAdvanced(ctx) {
     ]
       .filter(Boolean)
       .join(' · ');
-    flashMeta().textContent = `Ready: ${pkg.ufwName} (${formatBytes(pkg.ufwBytes.length)})`;
+    flashMeta().textContent = `Offline research package: ${pkg.ufwName} (${formatBytes(pkg.ufwBytes.length)}). Flash disabled.`;
   }
 
   function renderFindings() {
@@ -230,7 +231,7 @@ export function bindAdvanced(ctx) {
       const rows = await listGattSummary(server);
       $('#gattProbeOut').textContent = formatGatt(rows);
       toast('Probed via picker', 'ok');
-      // leave connected for possible flash — user may disconnect elsewhere
+      // leave connected for passive diagnostics only; flashing is disabled
     } catch (e) {
       if (e.name === 'NotFoundError') return;
       toast(e.message, 'err');
@@ -238,61 +239,23 @@ export function bindAdvanced(ctx) {
     }
   });
 
-  async function flashWithServer(server) {
-    if (!otaPkg?.ufwBytes?.length) throw new Error('Prepare or load a UFW package first');
-    if (!$('#otaConfirmRisk').checked) throw new Error('Confirm the brick-risk checkbox first');
-    if (flashing) throw new Error('OTA already running');
-    flashing = true;
-    const wrap = $('#otaFlashProgress');
-    const bar = $('#otaFlashBar');
-    wrap.hidden = false;
-    bar.style.width = '0%';
-    try {
-      const { writeChar, notifyChar } = await findJieliOtaChars(server);
-      log({
-        msg: `OTA flash start ${otaPkg.ufwName} (${otaPkg.ufwBytes.length} B)`,
-        level: 'warn',
-      });
-      const result = await runJieliOta(writeChar, notifyChar, otaPkg.ufwBytes, {
-        onLog: (m) => log({ msg: `[OTA] ${m}`, level: 'info' }),
-        onProgress: (p) => {
-          bar.style.width = `${p}%`;
-        },
-      });
-      toast(result.ok ? 'OTA complete' : 'OTA finished (verify unclear)', result.ok ? 'ok' : 'err');
-      flashMeta().textContent = result.ok ? 'Flash complete — device may reboot' : 'Flash done — verify unclear';
-    } finally {
-      flashing = false;
-      setTimeout(() => {
-        wrap.hidden = true;
-      }, 800);
-    }
+  // An OTA risk checkbox is not compatibility proof. Never run the old
+  // unauthenticated RCSP sender, even from the alternate device picker.
+  async function flashWithServer(_server) {
+    assertBrowserOtaFlashQualified(); // always throws; no BLE writes
   }
 
-  $('#btnOtaFlash').addEventListener('click', async () => {
-    try {
-      const server = client.getActiveGattServer();
-      if (!server?.connected) throw new Error('Connect a badge first (or use Picker + flash)');
-      await flashWithServer(server);
-    } catch (e) {
-      toast(e.message, 'err');
-      log({ msg: e.message, level: 'err' });
-    }
-  });
-
-  $('#btnOtaFlashPicker').addEventListener('click', async () => {
-    try {
-      if (!otaPkg?.ufwBytes?.length) throw new Error('Prepare or load a UFW package first');
-      if (!$('#otaConfirmRisk').checked) throw new Error('Confirm the brick-risk checkbox first');
-      const { device, server } = await pickerConnectOta();
-      log({ msg: `OTA flash picker → ${device.name || device.id}`, level: 'warn' });
-      await flashWithServer(server);
-    } catch (e) {
-      if (e.name === 'NotFoundError') return;
-      toast(e.message, 'err');
-      log({ msg: e.message, level: 'err' });
-    }
-  });
+  $('#btnOtaFlash').disabled = true;
+  $('#btnOtaFlashPicker').disabled = true;
+  $('#otaConfirmRisk').disabled = true;
+  $('#otaFlashMeta').textContent = BROWSER_OTA_BLOCK_REASON;
+  // Guard the handler too: e.g. script-driven clicks must not send packets.
+  for (const id of ['#btnOtaFlash', '#btnOtaFlashPicker']) {
+    $(id).addEventListener('click', () => {
+      try { assertBrowserOtaFlashQualified(); }
+      catch (e) { toast(e.message, 'err'); log({ msg:e.message, level:'warn' }); }
+    });
+  }
 
   $('#btnAdvHandshake').addEventListener('click', () =>
     client

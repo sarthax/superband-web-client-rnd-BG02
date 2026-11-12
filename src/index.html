@@ -15,7 +15,7 @@
         <div class="hero-top">
           <div class="brand-block">
             <h1>BADGE MANAGER</h1>
-            <p class="app-version" id="appVersion" aria-label="App version">2026.08.11.1</p>
+            <p class="app-version" id="appVersion" aria-label="App version">2026.11.12.1</p>
           </div>
           <nav class="hero-links" aria-label="Project links">
             <a
@@ -151,13 +151,13 @@
                 <div class="row">
                   <label class="field" for="pictureCodec">Badge picture format
                     <select id="pictureCodec">
-                      <option value="ru50" selected>RU50 / ETC2 — current working default</option>
-                      <option value="jpeg444">JPEG 4:4:4 — experimental, smaller files</option>
+                      <option value="jpeg444" selected>JPEG 4:4:4 — recommended on BG02 V1.5</option>
+                      <option value="ru50">RU50 / ETC2 — compatibility fallback</option>
                     </select>
                   </label>
                   <label class="field" id="pictureJpegQualityWrap" for="pictureJpegQuality" hidden>
-                    JPEG quality <span id="pictureJpegQualityLabel">65</span>
-                    <input id="pictureJpegQuality" type="range" min="35" max="90" step="1" value="65" />
+                    JPEG quality <span id="pictureJpegQualityLabel">80</span>
+                    <input id="pictureJpegQuality" type="range" min="35" max="90" step="1" value="80" />
                   </label>
                 </div>
                 <div id="pictureAllocationOptimizer" class="picture-allocation-optimizer" hidden>
@@ -170,8 +170,9 @@
                   <p id="pictureOptimizeInfo" class="hint" role="status">Convert once to establish the allocation block, or optimize directly using the current JPEG quality.</p>
                 </div>
                 <div class="row">
+                  <button type="button" class="primary" id="pictureQuickOptimize">Optimize picture</button>
                   <button type="button" id="pictureCompareBuild">Convert &amp; compare</button>
-                  <span id="pictureComparePrompt" class="hint">Select an image, set its crop, then compare both formats before uploading.</span>
+                  <span id="pictureComparePrompt" class="hint">Choose an image, adjust its crop, then Optimize picture. Nothing is sent until you click Upload.</span>
                 </div>
               </section>
               <section id="pictureComparison" class="picture-comparison" hidden>
@@ -194,7 +195,7 @@
                   </figure>
                 </div>
                 <p id="pictureCompareSavings" class="hint"></p>
-                <p id="pictureCompareStatus" class="hint" role="status">These previews decode the actual bytes prepared for the badge. Device-rendered JPEG stills remain untested.</p>
+                <p id="pictureCompareStatus" class="hint" role="status">These previews decode the actual bytes prepared for the badge. JPEG 4:4:4 has been tested on BG02 V1.5.</p>
               </section>
               <p class="lead" id="imageMeta">No image selected.</p>
               <div id="pictureSizePreview" class="picture-size-preview" hidden>
@@ -527,25 +528,25 @@
           <section class="section">
             <h2>BLE OTA flash</h2>
             <p class="lead">
-              JieLi RCSP over <span class="mono">AE01/AE02</span> (openwearota-compatible). Wrong
-              image can brick — match BJ-1 / DG01. AC707N is best-effort; device may require native
-              RCSP auth the app uses.
+              Firmware transfer is not qualified. This browser can inspect official update
+              packages, but <strong>cannot flash</strong> any badge. BG02 V1.5 has no verified matching
+              update file and the original RCSP sender is not authenticated.
             </p>
             <div class="stack">
               <label class="check"
-                ><input type="checkbox" id="otaConfirmRisk" /> I understand this can brick the
+                ><input type="checkbox" id="otaConfirmRisk" disabled /> I understand this can brick the
                 badge</label
               >
               <div class="row">
-                <button class="danger" data-need-conn disabled id="btnOtaFlash">
+                <button class="danger" disabled id="btnOtaFlash">
                   Flash UFW to active
                 </button>
-                <button class="danger" type="button" id="btnOtaFlashPicker">
+                <button class="danger" type="button" disabled id="btnOtaFlashPicker">
                   Picker + flash
                 </button>
               </div>
               <div class="progress" id="otaFlashProgress" hidden><i id="otaFlashBar"></i></div>
-              <p class="lead" id="otaFlashMeta">Load a package first.</p>
+              <p class="lead" id="otaFlashMeta">Flashing disabled pending verified image, board matching and authenticated OTA validation.</p>
             </div>
           </section>
 
