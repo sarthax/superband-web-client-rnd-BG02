@@ -13,7 +13,8 @@ import {
 } from './video-crop.js';
 
 export class VideoCropEditor {
-  constructor({ $, selectedFrames, getFit, canEdit, onChanged, onThumbsDirty }) {
+  constructor({ $, selectedFrames, getFit, canEdit, onChanged, onThumbsDirty,
+    previewVideo = null }) {
     this.els = {
       root: $('#videoCropEditor'),
       canvas: $('#videoCropCanvas'),
@@ -31,6 +32,7 @@ export class VideoCropEditor {
       hint: $('#videoCropHint'),
       frameGrid: $('#gifFrameGrid'),
     };
+    this.previewVideo = previewVideo;
     this.selectedFrames = selectedFrames;
     this.getFit = getFit;
     this.canEdit = canEdit;
@@ -81,6 +83,7 @@ export class VideoCropEditor {
     if (this.disabled === Boolean(disabled)) return;
     this.disabled = Boolean(disabled);
     this.updateControls();
+    this.syncFrameCards();
   }
 
   snapshot() {
@@ -225,6 +228,9 @@ export class VideoCropEditor {
       button.dataset.editing = String(this.source?.kind === 'gif' &&
         this.active === index);
       button.dataset.override = String(this.overrides.has(index));
+      const edit = button.closest('.gif-frame-tile')?.querySelector('.gif-frame-edit');
+      if (edit) edit.disabled = !this.selectedFrames.has(index) ||
+        this.disabled || !this.canEdit();
     });
   }
 
@@ -289,7 +295,8 @@ export class VideoCropEditor {
           picture = image;
         }
       } else {
-        picture = source.video;
+        picture = this.previewVideo?.readyState >= 2
+          ? this.previewVideo : source.video;
         if (!picture || picture.readyState < 2) return;
       }
       if (source !== this.source) return;
