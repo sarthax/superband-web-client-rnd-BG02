@@ -197,6 +197,13 @@
                 <p id="pictureCompareSavings" class="hint"></p>
                 <p id="pictureCompareStatus" class="hint" role="status">These previews decode the actual bytes prepared for the badge. JPEG 4:4:4 has been tested on BG02 V1.5.</p>
               </section>
+              <div class="row">
+                <button type="button" id="pictureSaveProject" disabled>Save picture project</button>
+                <button type="button" id="pictureOpenProject">Open picture project…</button>
+                <input id="pictureProjectFile" type="file" accept=".zip,application/zip" hidden />
+                <button type="button" id="pictureDownloadPrepared" disabled>Download prepared picture</button>
+              </div>
+              <p class="hint">Projects are portable ZIP files containing the source image and crop/format settings. Saving or opening a project never changes the badge.</p>
               <p class="lead" id="imageMeta">No image selected.</p>
               <div id="pictureSizePreview" class="picture-size-preview" hidden>
                 <h3>Picture size &amp; storage</h3>
@@ -207,6 +214,7 @@
                   <div><span>Free on badge</span><strong id="pictureFreeSpace">—</strong></div>
                 </div>
                 <p id="pictureSpaceHint" class="hint">File size is calculated from the encoded format; flash allocation is estimated.</p>
+                <p id="pictureStorageDelta" class="hint" role="status">Actual storage change will appear after a successful picture upload, if the badge reports it.</p>
               </div>
               <p class="hint" id="imageInputHint">Connect a badge to see supported image formats.</p>
               <p class="hint" id="pushStatus" role="status" aria-live="polite">Connect your badge, choose a photo, adjust the crop, then upload.</p>
@@ -318,6 +326,9 @@
               <div class="row">
                 <input class="file-input" id="videoInput" type="file" accept=".gif,image/gif,video/*,.mp4,.webm,.mov,.avi" />
                 <button type="button" id="videoPick">Choose GIF or video</button>
+                <button type="button" id="videoSaveProject" disabled>Save video/GIF project</button>
+                <button type="button" id="videoOpenProject">Open video/GIF project…</button>
+                <input id="videoProjectFile" type="file" accept=".zip,application/zip" hidden />
                 <span id="videoSourceDetails" class="muted">No video selected</span>
               </div>
               <div class="video-source-preview">
