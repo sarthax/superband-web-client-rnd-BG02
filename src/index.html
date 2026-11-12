@@ -285,6 +285,7 @@
             <div class="row">
               <button type="button" id="btnBg02LibraryInspect" disabled>Read badge media metadata</button>
               <button type="button" id="btnBg02MediaInterface" disabled>Check file-list interface</button>
+              <button type="button" id="btnBg02RcspIdentity" disabled>Read RCSP target identity (one request)</button>
               <button type="button" id="btnBg02LibraryExport" disabled>Export diagnostic JSON</button>
             </div>
             <div class="picture-size-grid">
@@ -298,6 +299,9 @@
               <div><span>Available stored-file entries</span><strong id="bg02MediaEntries">Not enumerated</strong></div>
             </div>
             <p id="bg02MediaTransportDetails" class="hint">Checking the AE00 GATT service does not query files, authenticate RCSP, or alter badge media.</p>
+            <p id="bg02RcspIdentityStatus" class="hint" role="status">
+              Identity not queried. After confirming RCSP transport, opt in to one read-only GET_TARGET_INFO (0x03) request.
+            </p>
             <div id="bg02MediaTelemetry" class="media-telemetry" hidden>
               <strong>Read-only storage/count history</strong>
               <p id="bg02MediaTelemetrySummary" class="hint">Read media metadata twice to compare candidate count and free bytes.</p>
