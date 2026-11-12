@@ -25,7 +25,9 @@ All output is 240×240 on BG02. Upload requires a connected, exact supported dev
 
 The **Video & GIF** tab accepts common browser-playable videos and animated GIFs, trims a segment, supports selecting GIF frames, shared/per-frame crops, compression and output comparison, and creates **240×240 Motion JPEG AVI**. You can download the encoded AVI before uploading.
 
-The original SuperBand capture was 3 fps for five seconds. The owner separately reported successful 1 fps playback on BG02; longer lengths and other settings remain experimental. Output has no audio; AVI size and storage allocation are measured before upload.
+The original SuperBand capture was 3 fps for five seconds. The owner separately reported successful 1 fps playback on BG02; longer lengths and 2/0.5 fps remain experimental. Output has no audio; AVI size and storage allocation are measured before upload.
+
+For clips capped at five seconds, **Optimize AVI** measures actual Low/Medium/High JPEG outputs and can optionally compare 1fps and 3fps at an 8 KiB allocation target. It keeps the selected frame rate when possible and previews the actual chosen AVI before manual upload. See [AVI optimization details](docs/BG02-VIDEO-SPACE-OPTIMIZER.md).
 
 ### Portable local editing projects
 
