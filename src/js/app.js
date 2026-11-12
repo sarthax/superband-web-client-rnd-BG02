@@ -91,6 +91,9 @@ function updatePictureCodecControls(snapshot = client.getSnapshot()) {
   $('#pictureJpegQualityLabel').textContent = $('#pictureJpegQuality').value;
   $('#pictureCompareBuild').disabled = !enabled || pictureComparing ||
     transferring || client.anyTransferring;
+  $('#pictureQuickOptimize').hidden = !enabled || pictureCodec() !== 'jpeg444';
+  $('#pictureQuickOptimize').disabled = !enabled || pictureComparing ||
+    transferring || client.anyTransferring;
   $('#pictureCodec').disabled = pictureComparing || transferring ||
     client.anyTransferring;
   $('#pictureJpegQuality').disabled = pictureComparing || transferring ||
@@ -125,10 +128,10 @@ function selectPictureCodec() {
       ? pictureComparison.jpeg : pictureComparison.ru50;
     prepared = { ...prepared, format: selected.format, bytes: selected.bytes };
     $('#pictureComparePrompt').textContent =
-      'Selected ' + (selected.format === 'jpeg444' ? 'experimental JPEG' : 'RU50') +
+      'Selected ' + (selected.format === 'jpeg444' ? 'JPEG 4:4:4' : 'RU50') +
       ' · ' + formatBytes(selected.bytes.length) + ' prepared for upload.';
     setUploadStatus(selected.format === 'jpeg444'
-      ? 'Experimental JPEG selected. Verify the A/B preview and confirm before transfer.'
+      ? 'JPEG ready. Review the image preview, then upload when you choose.'
       : 'RU50 selected. The previewed bytes are ready to upload.', 'ok');
   }
   renderPictureSize();
@@ -250,7 +253,7 @@ async function comparePicture(allocationShift = null) {
       '. Compare the fine edges and text before choosing.';
     $('#pictureComparison').hidden = false;
     $('#pictureCompareStatus').textContent =
-      'Previews are decoded from the real encoded bytes. Browser fidelity is not proof of BG02 JPEG playback. No upload has occurred.';
+      'Previews decode the actual encoded data. JPEG was hardware-tested on BG02 V1.5; visual results still vary by image. No upload has occurred.';
     // Mark the cache ready and default to whichever format user selected.
     prepared = { ...prepared, source: 'comparison' };
     selectPictureCodec();
@@ -313,7 +316,7 @@ function renderPictureSize(snapshot = client.getSnapshot()) {
   if (estimated?.fits === false) free.classList.add('picture-too-large');
   $('#pictureSpaceHint').textContent = profile.bg02
     ? selectedFormat === 'jpeg444' && !pictureComparison
-      ? 'Experimental JPEG needs a current Convert & compare result; ' +
+      ? 'JPEG needs a current image optimization or comparison; ' +
         'file size cannot be estimated before encoding.'
       : estimated?.fits === false
         ? 'Estimated image allocation exceeds the last reported free space. ' +
@@ -335,11 +338,11 @@ function syncConnectionChrome() {
   $$('[data-need-conn]').forEach((b) => {
     b.disabled = !on;
   });
-  // The upstream OTA firmware presets target BJ-1/DG01, not BG02 V1.5.
-  // Keep the BG02 flash actions disabled even after session refreshes.
-  if (resolveBadgeProfile(client.getSnapshot()).bg02) {
-    $('#btnOtaFlash').disabled = true;
-  }
+  // No browser OTA firmware transfer has been qualified. This guard is
+  // universal, even if a device/session event re-enables data-need-conn.
+  $('#btnOtaFlash').disabled = true;
+  $('#btnOtaFlashPicker').disabled = true;
+  $('#otaConfirmRisk').disabled = true;
 
   // Always allow adding another device while Web Bluetooth works
   $('#btnConnect').hidden = false;
@@ -501,9 +504,9 @@ function applyBadgeProfile(snapshot = client.getSnapshot()) {
 
   // The presets in Advanced are for BJ-1/DG01, not our LJ733 V1.5.
   // Do not accidentally offer unrelated firmware flashing as a BG02 action.
-  $('#btnOtaFlash').disabled = profile.bg02 || !client.connected;
-  $('#btnOtaFlashPicker').disabled = profile.bg02;
-  $('#otaConfirmRisk').disabled = profile.bg02;
+  $('#btnOtaFlash').disabled = true;
+  $('#btnOtaFlashPicker').disabled = true;
+  $('#otaConfirmRisk').disabled = true;
   if (changed && profile.bg02) $('#otaConfirmRisk').checked = false;
   if (changed) {
     const file = $('#imageInput').files?.[0];
@@ -681,8 +684,11 @@ async function connect(acceptAll) {
 async function rebuildPreview() {
   const token = ++previewGeneration;
   const file = $('#imageInput').files?.[0];
-  // Every new photo/device starts with our already-working RU50 default.
-  $('#pictureCodec').value = 'ru50';
+  // Choose tested JPEG only for a known matching board. RU50 remains the
+  // compatibility fallback when dial algorithm and hardware are unknown.
+  $('#pictureCodec').value =
+    resolveBadgeProfile(client.getSnapshot()).jpegExperimentSupported
+      ? 'jpeg444' : 'ru50';
   prepared = null;
   invalidatePictureComparison('Choose a crop, then compare RU50 with JPEG.');
   updatePushChecklist();
@@ -722,7 +728,7 @@ async function rebuildPreview() {
       const image = await loadImage(file);
       next = {
         bytes:null, width:240, height:240,
-        format:'ru50', source:'crop', name:file.name,
+        format:profile.format, source:'crop', name:file.name,
         sourceWidth:image.naturalWidth || image.width,
         sourceHeight:image.naturalHeight || image.height,
       };
@@ -750,7 +756,7 @@ async function rebuildPreview() {
     updatePictureCodecControls(now);
     renderPictureSize(now);
     setUploadStatus(profile.bg02 && next.source === 'crop'
-      ? 'Adjust framing, then Convert & compare before uploading.'
+      ? 'Adjust framing, then Optimize picture or Convert & compare before uploading.'
       : profile.bg02
         ? 'Encoded RU50 selected. You can upload the existing file.'
         : 'Picture ready. Select Upload to badge.', 'ok');
@@ -824,9 +830,8 @@ async function pushImage() {
       return;
     }
     if (!window.confirm(
-      'EXPERIMENTAL: upload the reviewed 240×240 JPEG 4:4:4 using Dial31 type 2? ' +
-      'A successful BLE ACK will not prove it displays or is stored correctly. ' +
-      'The current badge picture may change. Continue?'
+      'Upload the prepared JPEG to the BG02 and change its displayed picture? ' +
+      'Your existing badge photo may be replaced. Continue?'
     )) return;
   }
   if (!imageMatchesBadge(prepared, activeProfile, activeSnapshot)) {
@@ -857,7 +862,7 @@ async function pushImage() {
         availableBytes: storage.reportedBytes,
       });
       if (estimate?.fits === false) {
-        throw new Error('Experimental JPEG needs ~' +
+        throw new Error('JPEG needs ~' +
           formatBytes(estimate.allocationHint) +
           ' but only ~' + formatBytes(storage.reportedBytes) +
           ' is reported free. No bytes were uploaded.');
@@ -1064,6 +1069,7 @@ function bind() {
     invalidatePictureComparison('JPEG quality changed. Reconvert to preview new bytes.');
   });
   $('#pictureCompareBuild').addEventListener('click', () => void comparePicture());
+  $('#pictureQuickOptimize').addEventListener('click', () => void comparePicture(0));
   $('#pictureOptimizeCurrent').addEventListener('click', () => void comparePicture(0));
   $('#pictureOptimizeSmaller').addEventListener('click', () => void comparePicture(-1));
   $('#pictureOptimizeLarger').addEventListener('click', () => void comparePicture(1));
