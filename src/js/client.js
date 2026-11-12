@@ -119,6 +119,7 @@ class BadgeSession {
       storageCapacity: baji.storageCapacity ?? null,
       freeStorageSource: baji.freeStorage != null ? 'baji' :
         bg02 && this.fitProStorage ? 'fitpro-0x20/4-provisional' : null,
+      storageProbeSupported: bg02,
       maxFileSize: baji.maxFileSize ?? null,
       features: baji.features || null,
       mediaId: this.mediaId,
@@ -635,7 +636,10 @@ class BadgeSession {
         inspectRu50(fileBytes); // Reject corrupt/incorrect dimensions before Bluetooth write.
       }
       const info = this.dialInfo;
-      const dialType = info?.dialType ?? (info?.algorithm === 4 ? 2 : 0);
+      // Preserve the existing RU50 upload dialect even after a read-only
+      // 0x20/2 query reports JPEG capability. Telemetry must not change what
+      // the image sender previously transmitted.
+      const dialType = isRu50 ? 0 : (info?.dialType ?? (info?.algorithm === 4 ? 2 : 0));
       const expectJpeg = dialType === 2;
       if (isRu50 && expectJpeg) throw new Error('RU50 requires dial type 0, not JPEG type 2');
       const looksJpeg =
@@ -723,6 +727,21 @@ class BadgeSession {
         `Dial31 complete ${fileBlob.length}B in ${totalChunks} logical chunks (checksum=${checksum})`,
         'ok',
       );
+
+      // A successful Dial31 finish is not a storage refresh. Give the badge
+      // time to commit media, then re-read BG02 telemetry. Never turn an
+      // accepted picture upload into a failure if this optional read times out.
+      if (this.isKnownBg02V15 && this.connected) {
+        await sleep(800);
+        if (this.connected) {
+          this.ble?.setQuiet?.(false); // retain read/response bytes in Activity
+          try {
+            await this.refreshFitProStorage({ timeoutMs: 5000 });
+          } catch (e) {
+            this._log(`Post-upload storage refresh unavailable: ${e.message}`, 'warn');
+          }
+        }
+      }
       return {
         fileId: FitPro.PICTURE_DIAL_ID,
         mediaId: FitPro.PICTURE_DIAL_ID,
