@@ -9,7 +9,7 @@ a read-only metadata inquiry, not an OTA installation test. Target hardware:
 One bounded GitHub-hosted audit using the previously recovered SuperBand
 2.1.25 catalog API. Its [successful execution](https://github.com/sarthax/superband-web-client-rnd-BG02/actions/runs/43121296993)
 called `tools/bg02_catalog_audit.py` to invoke the existing
-`tools/probe-ota.mjs` against eight **already-documented version keys**.
+`tools/probe-ota.mjs` against eight previously documented keys, plus **V35509 independently observed on a BG02-family LJ733_MB_V1.1** in [arqueomendez/ebadge](https://github.com/arqueomendez/ebadge).
 No guessing or brute-forcing numeric versions. No BLE connection, writes,
 firmware flashing, download, or archives uploaded.
 
@@ -30,6 +30,7 @@ entire vendor response, raw URLs or hardware identifiers.
 | Input `version` | Server entry | Firmware target and branch |
 |---|---|---|
 | `V35922` | **no offer** | No BG02 V35922 or later image URL |
+| `V35509` | **no offer** | Authentic LJ733_MB_V1.1 earlier firmware from independent research, not proven BG02 V1.5 predecessor |
 | `V34574` | **no offer** | Target version of a different LJ733B cut |
 | `V34576` | **no offer** | Target version of a different LJ733B cut |
 | `V34250` | upgrade | `V34574_A05271020_LJ733_V1.1_HYX004_HYX_ZTFITPRO.zip` |
@@ -42,6 +43,10 @@ entire vendor response, raw URLs or hardware identifiers.
 entries use product `LJ733`, but their firmware filenames identify different
 OEM/hardware cuts. A public catalog response can be downloaded and unpacked
 for study; **it is not permission to flash across model variants**.
+
+## Independent version follow-up
+
+A corrected follow-up [official catalog job](https://github.com/sarthax/superband-web-client-rnd-BG02/actions/runs/43133209595) included **V35509** and passed. The catalog returned **no update offered** for that real observed revision. All previous eight results remained unchanged. This does not demonstrate that V35509 is related to the V1.5 BG02 upgrade path.
 
 ## What we cannot conclude
 
@@ -89,7 +94,7 @@ From the repo root, with Bun and Python 3 available:
 python tools/bg02_catalog_audit.py
 ```
 
-This checks only the eight hardcoded, documented source/target versions
+This checks only the nine evidence-backed source/target versions
 and prints sanitized metadata. For a newly **observed** real predecessor
 version, use the existing `bun tools/probe-ota.mjs` command directly.
 
