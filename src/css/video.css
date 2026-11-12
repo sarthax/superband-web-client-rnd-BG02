@@ -220,3 +220,17 @@
   .video-section .video-crop-layout { grid-template-columns: minmax(0, 1fr); }
   .video-section #videoCropCanvas { margin-inline: auto; }
 }
+
+.video-section .gif-frame-tile { display: grid; gap: .3rem; align-content: start; }
+.video-section .gif-frame-tile .gif-frame-card { width: 100%; }
+.video-section .gif-frame-edit {
+  padding: .32rem .4rem;
+  font-size: .72rem;
+  border-radius: 7px;
+  min-height: 28px;
+}
+.video-section .gif-frame-edit:disabled { opacity: .45; }
+.video-section .video-crop-settings button[aria-pressed="true"] {
+  color: var(--lime);
+  border-color: var(--lime);
+}
