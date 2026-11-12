@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   probeBg02MediaTransport, mediaTelemetryDiff,
 } from '../js/bg02-media-capabilities.js';
-import { JIELI_OTA } from '../js/jieli-ota.js';
+import { JIELI_OTA, listGattSummary } from '../js/jieli-ota.js';
 
 test('GATT probe discovers AE00/AE01/AE02 without sending even one byte', async () => {
   const operations = [];
@@ -86,4 +86,20 @@ test('disconnected probe does not discover any GATT service',async()=>{
     probeBg02MediaTransport({connected:false, getPrimaryService(){throw Error('should not call')}}),
     /connected/i,
   );
+});
+
+test('generic GATT display recognizes inherited WebIDL characteristic flags',async()=>{
+  // Chrome exposes Bluetooth characteristic flags via prototype getters.
+  // Object.entries(properties) would incorrectly show [] for every property.
+  const props=Object.create({write:true,notify:true});
+  assert.deepEqual(Object.entries(props),[]);
+  const svc={
+    uuid:JIELI_OTA.SERVICE,
+    async getCharacteristics(){
+      return [{uuid:JIELI_OTA.WRITE,properties:props}];
+    },
+  };
+  const server={async getPrimaryServices(){return [svc]}};
+  const rows=await listGattSummary(server);
+  assert.deepEqual(rows[0].characteristics[0].properties,['write','notify']);
 });
