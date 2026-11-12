@@ -276,7 +276,12 @@ export async function convertVideoToBg02Avi(source, {
   ctx.imageSmoothingQuality = 'high';
   const renderGif = source.kind === 'gif' ? gifSampler(source) : null;
   const frameBytes = [];
+  // Preserve precisely the sampled/cropped source pixels BEFORE MJPEG JPEG
+  // compression. This gives a fair synchronized A/B preview for GIF keyframes
+  // and ordinary trimmed video at any chosen output FPS.
+  const referenceFrames = [];
   let thumbnail = null;
+  try {
   for (let i = 0; i < total; i++) {
     abortIf(signal);
     let picture;
@@ -295,6 +300,7 @@ export async function convertVideoToBg02Avi(source, {
       if (source.kind === 'gif') picture.close();
     }
     if (i === 0) thumbnail = canvas.toDataURL('image/jpeg', opts.jpegQuality);
+    referenceFrames.push(await createImageBitmap(canvas));
     frameBytes.push(await jpegFromCanvas(canvas, opts.jpegQuality));
     onProgress({ frame: i + 1, total, percent: Math.round((i + 1) * 100 / total) });
     // Avoid holding the UI thread for extended GIF/experimental conversions.
@@ -303,5 +309,10 @@ export async function convertVideoToBg02Avi(source, {
   abortIf(signal);
   const bytes = muxBg02MjpegAvi(frameBytes, { fps });
   const info = inspectBg02MjpegAvi(bytes);
-  return { bytes, info, thumbnail, quality, loop, plan, sourceName: source.name };
+  return { bytes, info, thumbnail, quality, loop, plan,
+    referenceFrames, sourceName: source.name };
+  } catch (e) {
+    for (const frame of referenceFrames) frame.close();
+    throw e;
+  }
 }
