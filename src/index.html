@@ -359,7 +359,7 @@
                     <select id="videoFps">
                       <option value="3" selected>3 fps — SuperBand reference</option>
                       <option value="2">2 fps — experimental</option>
-                      <option value="1">1 fps — experimental</option>
+                      <option value="1">1 fps — BG02 playback confirmed</option>
                       <option value="0.5">0.5 fps — experimental</option>
                     </select>
                   </label>
@@ -379,7 +379,7 @@
                 </div>
                 <label class="check"><input id="videoLoop" type="checkbox" /> Repeat selected segment to fill the maximum length (off by default)</label>
                 <p id="videoRangeInfo" class="hint">The maximum duration never pads a shorter clip unless Repeat is enabled.</p>
-                <p id="videoFpsInfo" class="hint">3 fps is the captured SuperBand format. Lower fps might play at the wrong speed or not play.</p>
+                <p id="videoFpsInfo" class="hint">3 fps matches the recovered SuperBand format. 1 fps has also been played successfully on BG02; 2 and 0.5 fps remain experimental.</p>
               </div>
               <div id="gifFramePicker" class="gif-frame-picker" hidden>
                 <h3>GIF frame picker</h3>
@@ -472,6 +472,26 @@
                   <p id="videoTransferWarning" class="hint">No audio. Clips longer than 5 seconds could be shortened or rejected by the badge.</p>
                 </div>
               </div>
+              <section class="video-storage-optimizer" id="videoOptimizePanel">
+                <h3>Optimize AVI for badge storage</h3>
+                <p class="hint">For clips up to 5 seconds: measure Low/Medium/High JPEG options, and optionally compare 1 fps and 3 fps. The highest fitting preset at your chosen frame rate wins; the resulting AVI is previewed before any upload.</p>
+                <div class="row">
+                  <label class="field" for="videoOptimizeBucket">Storage target
+                    <select id="videoOptimizeBucket">
+                      <option value="0">Best quality within current 8 KiB allocation</option>
+                      <option value="-1">Try using one 8 KiB block less</option>
+                    </select>
+                  </label>
+                  <label class="field" for="videoOptimizeFrameRates">Frame rate comparison
+                    <select id="videoOptimizeFrameRates">
+                      <option value="current">Keep selected FPS</option>
+                      <option value="compare">Also measure 1 fps and 3 fps</option>
+                    </select>
+                  </label>
+                  <button type="button" id="videoOptimize" disabled>Optimize AVI</button>
+                </div>
+                <p id="videoOptimizeReport" class="hint" role="status">Choose a source and crop/trim settings first. Optimization never uploads or deletes media.</p>
+              </section>
               <p id="videoStatus" class="hint" role="status" aria-live="polite">Conversion runs locally in your browser. The photo uploader is unchanged.</p>
               <div class="progress" id="videoProgress" role="progressbar" aria-label="Video conversion or upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i id="videoBar"></i></div>
             </div>
