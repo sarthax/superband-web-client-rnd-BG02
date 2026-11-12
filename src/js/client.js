@@ -732,11 +732,19 @@ class BadgeSession {
       // time to commit media, then re-read BG02 telemetry. Never turn an
       // accepted picture upload into a failure if this optional read times out.
       if (this.isKnownBg02V15 && this.connected) {
+        const beforeBytes = this.fitProStorage?.reportedBytes ?? null;
         await sleep(800);
         if (this.connected) {
           this.ble?.setQuiet?.(false); // retain read/response bytes in Activity
           try {
-            await this.refreshFitProStorage({ timeoutMs: 5000 });
+            const after = await this.refreshFitProStorage({ timeoutMs: 5000 });
+            if (beforeBytes != null) {
+              const delta = after.reportedBytes - beforeBytes;
+              this._log(
+                `BG02 storage candidate after upload: before=${beforeBytes}B after=${after.reportedBytes}B change=${delta}B`,
+                delta === 0 ? 'warn' : 'info',
+              );
+            }
           } catch (e) {
             this._log(`Post-upload storage refresh unavailable: ${e.message}`, 'warn');
           }
