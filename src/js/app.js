@@ -220,6 +220,8 @@ function applyBadgeProfile(snapshot = client.getSnapshot()) {
   $('#btnOtaFlash').disabled = profile.bg02 || !client.connected;
   $('#btnOtaFlashPicker').disabled = profile.bg02;
   $('#otaConfirmRisk').disabled = profile.bg02;
+  $('#btnRefreshStorage').disabled = !snapshot?.storageProbeSupported ||
+    !client.connected || transferring || client.anyTransferring;
   if (changed && profile.bg02) $('#otaConfirmRisk').checked = false;
   if (changed) {
     const file = $('#imageInput').files?.[0];
@@ -254,7 +256,8 @@ function renderSnapshot(snap) {
     protocol: dash(s.protocol),
     free: s.freeStorageSource === 'fitpro-0x20/4-provisional'
       ? `~${fmtBig(s.freeStorage)}` : fmtBig(s.freeStorage),
-    cap: fmtBig(s.storageCapacity),
+    cap: s.storageProbeSupported && s.storageCapacity == null
+      ? 'Not reported' : fmtBig(s.storageCapacity),
   };
 
   for (const [key, val] of Object.entries(fields)) {
@@ -685,6 +688,21 @@ function bind() {
       })
       .catch((e) => toast(e.message, 'err')),
   );
+  $('#btnRefreshStorage').addEventListener('click', async () => {
+    try {
+      if (!client.connected || client.anyTransferring) {
+        throw new Error('Connect a badge and finish any upload first');
+      }
+      $('#btnRefreshStorage').disabled = true;
+      const info = await client.refreshFitProStorage({ timeoutMs: 5000 });
+      toast(`BG02 storage candidate: ~${formatBytes(info.reportedBytes)}`, 'ok');
+    } catch (e) {
+      toast(e.message, 'err');
+      log({ msg: `Storage refresh: ${e.message}`, level: 'warn' });
+    } finally {
+      renderSnapshot();
+    }
+  });
   $('#btnPair').addEventListener('click', () =>
     client.pair().catch((e) => toast(e.message, 'err')),
   );
