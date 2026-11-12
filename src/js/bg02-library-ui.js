@@ -54,6 +54,7 @@ export function bindBg02Library({ client, $, log }) {
     if (!allowed(snap)) return;
     if (reading || client.anyTransferring) return;
     reading = true;
+    lastDiagnostic = null; // Never export stale values after a failed new read.
     el.status.textContent = 'Reading verified BG02 0x20/2 dial info and 0x20/4 storage…';
     update(snap);
     try {
