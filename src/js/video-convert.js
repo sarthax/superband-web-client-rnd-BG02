@@ -176,7 +176,12 @@ export async function gifFrameThumbnail(source, index) {
     const canvas = document.createElement('canvas');
     canvas.width = 112; canvas.height = 112;
     const ctx = canvas.getContext('2d', { alpha: false });
-    coverOrContain(ctx, image, source.width, source.height, 'contain');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const scale = Math.min(canvas.width / source.width, canvas.height / source.height);
+    const width = source.width * scale, height = source.height * scale;
+    ctx.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2,
+      width, height);
     return canvas.toDataURL('image/jpeg', 0.65);
   } finally {
     image.close();
