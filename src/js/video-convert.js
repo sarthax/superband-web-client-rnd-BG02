@@ -7,7 +7,7 @@
  */
 import { BG02_VIDEO, muxBg02MjpegAvi, inspectBg02MjpegAvi, extractBg02AviFrame } from './video-avi.js';
 import { planTrimmedVideo, planGifStoryboard } from './video-timeline.js';
-import { defaultVideoCrop, drawVideoCrop } from './video-crop.js';
+import { defaultVideoCrop, drawVideoCrop, resolveVideoFrameCrop } from './video-crop.js';
 
 export const VIDEO_QUALITIES = Object.freeze({
   low: { label: 'Low', jpegQuality: 0.30 },
@@ -287,12 +287,10 @@ export async function convertVideoToBg02Avi(source, {
       picture = source.video;
     }
     try {
-      const override = source.kind === 'gif' && originalGifIndex != null
-        ? (frameCropOverrides instanceof Map
-          ? frameCropOverrides.get(originalGifIndex)
-          : frameCropOverrides?.[originalGifIndex]) : null;
-      drawVideoCrop(ctx, picture, source.width, source.height,
-        override || sharedCrop, fit);
+      const crop = source.kind === 'gif'
+        ? resolveVideoFrameCrop(sharedCrop, frameCropOverrides, originalGifIndex)
+        : sharedCrop;
+      drawVideoCrop(ctx, picture, source.width, source.height, crop, fit);
     } finally {
       if (source.kind === 'gif') picture.close();
     }
