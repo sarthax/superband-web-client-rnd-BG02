@@ -151,6 +151,14 @@
                 <div class="dial round" id="dial">
                   <div class="placeholder" id="dialPlaceholder">Choose an image<br />to preview</div>
                   <img id="dialPreview" alt="" hidden />
+                  <canvas id="cropCanvas" width="320" height="320" aria-label="Round photo crop. Drag to move the photo." hidden></canvas>
+                </div>
+                <div id="cropControls" class="crop-controls" hidden>
+                  <label for="cropZoom">Zoom</label>
+                  <input id="cropZoom" type="range" min="100" max="400" value="100" step="1" aria-label="Photo zoom" />
+                  <span id="cropZoomValue" class="crop-zoom-value">100%</span>
+                  <button type="button" id="cropReset">Reset</button>
+                  <p class="hint crop-tip">Drag the photo to move it. Use the slider, scroll wheel, or pinch to zoom.</p>
                 </div>
                 <div class="row">
                   <input class="file-input" id="imageInput" type="file" accept="image/*,.ru50" />

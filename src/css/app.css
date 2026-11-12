@@ -849,3 +849,35 @@ input[type='number'] {
 [hidden] {
   display: none !important;
 }
+
+/* BG02 round crop editor — responsive and touch friendly. */
+.dial.crop-active {
+  animation: none;
+  border-color: var(--mint);
+  box-shadow: 0 0 0 4px rgba(62, 224, 184, 0.15);
+}
+.dial canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+.dial canvas:active { cursor: grabbing; }
+.crop-controls {
+  width: min(100%, 23rem);
+  display: grid;
+  grid-template-columns: auto minmax(6rem, 1fr) auto auto;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+.crop-controls[hidden] { display: none; }
+.crop-controls label { color: var(--text); font-size: 0.85rem; }
+.crop-controls input[type='range'] { width: 100%; accent-color: var(--mint); }
+.crop-zoom-value { min-width: 3.5rem; font-family: var(--font-mono); font-size: 0.8rem; text-align: right; }
+.crop-controls button { padding: 0.4rem 0.7rem; }
+.crop-tip { grid-column: 1 / -1; text-align: center; margin: 0; }
+
+/* Hidden state must beat the preview's explicit display:block rules. */
+.dial img[hidden], .dial canvas[hidden], .dial .placeholder[hidden] { display: none; }

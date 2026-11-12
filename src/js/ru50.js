@@ -1,11 +1,11 @@
 /**
- * Experimental LJ733/BG02 image container validator.
- *
- * Format derived from arqueomendez/ebadge (vendor BmpConvert disassembly).
- * This module deliberately does not create ETC2 textures in the browser:
- * encode with the existing Python etcpak tool, then import the RU50 file.
- * No evidence yet that BG02 V35922 accepts RU50 within dial31.
+ * BG02/LJ733 RU50 image wrapper and validator.
+ * Header constants/CRCs from vendor BmpConvert disassembly reported by
+ * arqueomendez/ebadge. Browser ETC2 encoder uses valid ETC1-subset blocks.
+ * Hardware confirmation of this browser encoder is still required.
  */
+import { encodeEtc2Rgb } from './etc2.js';
+
 export const RU50_HEADER_SIZE = 0x450;
 const NIBBLE_CRC_TABLE = [
   0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
@@ -62,5 +62,47 @@ export function looksLikeBg02(snapshot) {
   const identity = [
     snapshot?.name, snapshot?.model, snapshot?.manufacturer, snapshot?.hardware,
   ].filter(Boolean).join(' ');
-  return /\bBG02\b/i.test(identity) || /LJ733[_-]/i.test(identity);
+  return /\bBG02\b/i.test(identity) || /LJ733_MB_V1\.(?:1|5)\b/i.test(identity);
+}
+
+/**
+ * Wrap an ETC2 RGB8 stream in the 0x450-byte vendor RU50 header.
+ * The flags and populated field offsets mirror the verified Python wrapper.
+ */
+export function wrapEtc2AsRu50(payload, width = 240, height = 240) {
+  if (!(payload instanceof Uint8Array) || width !== 240 || height !== 240 ||
+      payload.length !== width * height / 2) {
+    throw new Error('BG02 RU50 needs exactly 28800 bytes of 240×240 ETC2 RGB8 data');
+  }
+  const bytes = new Uint8Array(RU50_HEADER_SIZE + payload.length);
+  bytes.set([0x52,0x55,0x35,0x30], 0); // "RU50"
+  const view = new DataView(bytes.buffer);
+  // Constants taken from vendor BmpConvert br35_bmp_to_res, LE.
+  view.setBigUint64(0x04, 0x0000000100010500n, true);
+  view.setBigUint64(0x10, 0x0000001800000000n, true);
+  view.setBigUint64(0x18, 0x0054000100000030n, true);
+  view.setBigUint64(0x20, 0x0000003c00000000n, true);
+  view.setBigUint64(0x28, 0x0000000000500001n, true);
+  view.setBigUint64(0x30, 0x0000005000000100n, true);
+  view.setUint32(0x38, 0x400, true);
+  view.setUint32(0x40, 0x00920001, true);
+  view.setUint16(0x44, width, true);
+  view.setUint16(0x46, height, true);
+  view.setUint32(0x48, payload.length, true);
+  view.setUint32(0x4c, RU50_HEADER_SIZE, true);
+  // The 0x50..0x450 reserved region is intentionally zero.
+  bytes.set(payload, RU50_HEADER_SIZE);
+  view.setUint16(0x3e, ru50Crc16(payload), true);
+  view.setUint16(0x3c, ru50Crc16(bytes.subarray(0x3e,0x50)), true);
+  inspectRu50(bytes);
+  return bytes;
+}
+
+/** Convert a 240×240 RGBA crop directly to the BG02 RU50 upload bytes. */
+export async function encodeImageDataRu50(imageData) {
+  if (!imageData || imageData.width !== 240 || imageData.height !== 240) {
+    throw new Error('BG02 crop must be 240×240');
+  }
+  const payload = await encodeEtc2Rgb(imageData);
+  return wrapEtc2AsRu50(payload, 240, 240);
 }
