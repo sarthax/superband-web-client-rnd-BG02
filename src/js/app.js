@@ -10,6 +10,7 @@ import { bindBg02Library } from './bg02-library-ui.js';
 import { estimatePictureStorage } from './picture-size.js';
 import { prepareBg02PictureComparison } from './picture-comparison.js';
 import { encodeBaselineJpeg444 } from './jpeg444.js';
+import { createBg02Project, readBg02Project } from './editor-project.js';
 import {
   jpegAllocationSummary, jpegTargetAllocation, optimizeJpegAllocation,
 } from './jpeg-allocation.js';
@@ -73,6 +74,62 @@ function setUploadStatus(message, state = '') {
  * RU50 is fixed-size (29,904 B) regardless of original picture or crop;
  * the UI never claims an exact physical flash block size.
  */
+
+
+function downloadOfflineBytes(bytes, name, type = 'application/octet-stream') {
+  const url = URL.createObjectURL(new Blob([bytes], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = String(name).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 180);
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
+}
+
+async function savePictureProject() {
+  const file = $('#imageInput').files?.[0];
+  if (!file || !cropper.image || !resolveBadgeProfile(client.getSnapshot()).bg02)
+    throw new Error('Choose a BG02 source photo before saving a project');
+  if (transferring || pictureComparing) throw new Error('Finish current operation');
+  const bytes = await createBg02Project(file, 'picture', {
+    codec: pictureCodec(),
+    jpegQuality: Number($('#pictureJpegQuality').value),
+    crop: cropper.snapshot(),
+  });
+  const base = file.name.replace(/\.[^.]+$/, '') || 'badge-photo';
+  downloadOfflineBytes(bytes, base + '.bg02-project.zip', 'application/zip');
+}
+
+async function openPictureProject(zipFile) {
+  if (transferring || pictureComparing || client.anyTransferring)
+    throw new Error('Finish the active transfer before opening a project');
+  const record = readBg02Project(new Uint8Array(await zipFile.arrayBuffer()));
+  if (record.kind !== 'picture') throw new Error('This ZIP contains a video/GIF project');
+  if (!resolveBadgeProfile(client.getSnapshot()).bg02)
+    throw new Error('Connect BG02 before opening a picture project');
+  const sourceFile = new File([record.sourceBytes], record.sourceName, {
+    type: record.sourceMime,
+  });
+  const transfer = new DataTransfer();
+  transfer.items.add(sourceFile);
+  $('#imageInput').files = transfer.files;
+  await rebuildPreview();
+  if (!cropper.image || prepared?.source !== 'crop')
+    throw new Error('The project image could not be loaded');
+  cropper.restore(record.state.crop);
+  $('#pictureCodec').value = record.state.codec;
+  $('#pictureJpegQuality').value = String(record.state.jpegQuality);
+  invalidatePictureComparison('Project restored. Optimize or compare before uploading.');
+  updatePushChecklist();
+  setUploadStatus('Project restored locally. No badge data was sent.', 'ok');
+}
+
+function downloadPreparedPicture() {
+  if (!prepared?.bytes?.length) throw new Error('Optimize or compare the image first');
+  const base = ($('#imageInput').files?.[0]?.name || 'BG02').replace(/\.[^.]+$/, '');
+  const jpeg = prepared.format === 'jpeg444';
+  downloadOfflineBytes(prepared.bytes, base + '-BG02.' + (jpeg ? 'jpg' : 'ru50'),
+    jpeg ? 'image/jpeg' : 'application/octet-stream');
+}
 
 function pictureCodec() {
   return $('#pictureCodec').value === 'jpeg444' ? 'jpeg444' : 'ru50';
@@ -606,6 +663,11 @@ function updatePushChecklist() {
     client.sessionCount >= 2 && canPush && !profile.bg02 &&
     prepared?.format !== 'ru50'
   );
+  $('#pictureSaveProject').disabled = !idle || !cropper.image ||
+    !profile.bg02 || prepared?.source === 'encoded';
+  $('#pictureOpenProject').disabled = !idle;
+  $('#pictureDownloadPrepared').disabled = !idle || !prepared?.bytes?.length ||
+    !profile.bg02;
   $('#btnPickImage').disabled = !idle;
   $('#imageInput').disabled = !idle;
   $('#cropZoom').disabled = !idle;
@@ -690,6 +752,8 @@ async function rebuildPreview() {
     resolveBadgeProfile(client.getSnapshot()).jpegExperimentSupported
       ? 'jpeg444' : 'ru50';
   prepared = null;
+  $('#pictureStorageDelta').textContent =
+    'Actual storage change will appear after a successful picture upload, if available.';
   invalidatePictureComparison('Choose a crop, then compare RU50 with JPEG.');
   updatePushChecklist();
   hideCropper();
@@ -847,22 +911,29 @@ async function pushImage() {
   setUploadStatus('Preparing your picture for transfer…', 'busy');
   transferring = true;
   updatePushChecklist();
+  let beforePictureBytes = Number.isSafeInteger(activeSnapshot.freeStorage)
+    ? activeSnapshot.freeStorage : null;
   try {
     let uploadBytes = prepared.bytes;
-    if (activeProfile.bg02 && prepared.format === 'jpeg444') {
+    if (activeProfile.bg02 && ['jpeg444','ru50'].includes(prepared.format)) {
+      // Read immediately before the actual upload, not just when connecting.
+      // Both codecs should report a meaningful pre/post storage delta.
       const storage = await client.refreshFitProStorage({ timeoutMs: 5000 });
+      beforePictureBytes = storage.reportedBytes;
       const after = client.getSnapshot();
+      const verified = resolveBadgeProfile(after);
       if (after.sessionId !== activeSnapshot.sessionId ||
-          !resolveBadgeProfile(after).jpegExperimentSupported) {
-        throw new Error('Badge identity or JPEG capability changed during preflight');
+          !verified.bg02 || (prepared.format === 'jpeg444' &&
+          !verified.jpegExperimentSupported)) {
+        throw new Error('Badge identity or codec capability changed during preflight');
       }
       const estimate = estimatePictureStorage({
-        bg02: true, format: 'jpeg444',
+        bg02: true, format: prepared.format,
         encodedBytes: uploadBytes.length,
         availableBytes: storage.reportedBytes,
       });
       if (estimate?.fits === false) {
-        throw new Error('JPEG needs ~' +
+        throw new Error('The picture needs ~' +
           formatBytes(estimate.allocationHint) +
           ' but only ~' + formatBytes(storage.reportedBytes) +
           ' is reported free. No bytes were uploaded.');
@@ -918,6 +989,29 @@ async function pushImage() {
       msg: `Push complete → ${client.name || result.sessionId} via=${via} id=${result.mediaId} sum=0x${Number(result.checksum).toString(16)}`,
       level: 'ok',
     });
+    if (activeProfile.bg02 && beforePictureBytes != null) {
+      try {
+        const newStorage = await client.refreshFitProStorage({ timeoutMs: 5000 });
+        if (client.getSnapshot().sessionId === activeSnapshot.sessionId &&
+            Number.isSafeInteger(newStorage.reportedBytes)) {
+          const delta = beforePictureBytes - newStorage.reportedBytes;
+          const estimate = estimatePictureStorage({
+            bg02: true, format: prepared.format, encodedBytes: uploadBytes.length,
+          });
+          $('#pictureStorageDelta').textContent =
+            'Observed storage: before ' + formatBytes(beforePictureBytes) +
+            ' · after ' + formatBytes(newStorage.reportedBytes) +
+            ' · change ' + (delta >= 0 ? '-' : '+') +
+            formatBytes(Math.abs(delta)) +
+            ' (estimated allocation ' + formatBytes(estimate.allocationHint) +
+            '). A replacement may reclaim older blocks.';
+        }
+      } catch (e) {
+        $('#pictureStorageDelta').textContent =
+          'Upload acknowledged; post-upload storage reading unavailable.';
+        log({ msg:'Post-upload storage read: ' + e.message, level:'warn' });
+      }
+    }
     if (via === 'baji') {
       $('#mediaIdPill').textContent = `Media ID ${result.mediaId}`;
       client.requestMediaList().catch(() => {});
@@ -1073,6 +1167,18 @@ function bind() {
   $('#pictureOptimizeCurrent').addEventListener('click', () => void comparePicture(0));
   $('#pictureOptimizeSmaller').addEventListener('click', () => void comparePicture(-1));
   $('#pictureOptimizeLarger').addEventListener('click', () => void comparePicture(1));
+  $('#pictureSaveProject').addEventListener('click', () => {
+    void savePictureProject().catch(e => toast(e.message, 'err'));
+  });
+  $('#pictureOpenProject').addEventListener('click', () => $('#pictureProjectFile').click());
+  $('#pictureProjectFile').addEventListener('change', () => {
+    const file = $('#pictureProjectFile').files?.[0];
+    $('#pictureProjectFile').value = '';
+    if (file) void openPictureProject(file).catch(e => toast(e.message, 'err'));
+  });
+  $('#pictureDownloadPrepared').addEventListener('click', () => {
+    try { downloadPreparedPicture(); } catch (e) { toast(e.message, 'err'); }
+  });
   $('#btnPickImage').addEventListener('click', () => $('#imageInput').click());
   $('#imageInput').addEventListener('change', () => rebuildPreview());
   $('#dialW').addEventListener('change', () => rebuildPreview());

@@ -6,12 +6,16 @@ import { BG02_VIDEO } from './video-avi.js';
 import { resolveBadgeProfile } from './device-profile.js';
 import { AviComparisonPreview } from './video-preview.js';
 import { VideoCropEditor } from './video-crop-ui.js';
+import { createBg02Project, readBg02Project } from './editor-project.js';
 
 export function bindVideo({ client, log, toast, $ }) {
   const els = {
     section: $('#videoSection'),
     input: $('#videoInput'),
     pick: $('#videoPick'),
+    saveProject: $('#videoSaveProject'),
+    openProject: $('#videoOpenProject'),
+    projectFile: $('#videoProjectFile'),
     player: $('#videoSourcePlayer'),
     gif: $('#videoSourceGif'),
     sourceDetails: $('#videoSourceDetails'),
@@ -241,6 +245,8 @@ export function bindVideo({ client, log, toast, $ }) {
     els.gifClear.disabled = !gif || !idle || selectedGifFrames.size === 0;
     els.convert.textContent = aviOriginal ? 'Use AVI unchanged' : 'Convert & measure AVI';
     els.pick.disabled = !idle;
+    els.saveProject.disabled = !source || !idle;
+    els.openProject.disabled = !idle;
     els.input.disabled = !idle;
     els.start.disabled = !source || !idle || aviOriginal || useFrames;
     els.end.disabled = !source || !idle || aviOriginal || useFrames;
@@ -494,6 +500,84 @@ export function bindVideo({ client, log, toast, $ }) {
     }
   }
 
+
+  function saveVideoState() {
+    if (!source || !els.input.files?.[0])
+      throw new Error('Choose a GIF or video first');
+    const c = cropEditor.snapshot();
+    return {
+      start:Number(els.start.value),
+      end:Number(els.end.value),
+      seconds:Number(els.seconds.value),
+      fps:Number(els.fps.value),
+      quality:els.quality.value,
+      fit:els.fit.value,
+      loop:els.loop.checked,
+      gifUseFrames:els.gifUseFrames.checked,
+      gifHold:Number(els.gifHold.value),
+      frameIndices:[...selectedGifFrames].sort((a,b)=>a-b),
+      crop:{
+        sharedCrop:c.sharedCrop,
+        frameCropOverrides:[...c.frameCropOverrides.entries()],
+      },
+    };
+  }
+
+  async function saveVideoProject() {
+    if (!source || working || uploading || client.anyTransferring)
+      throw new Error('Finish current conversion or choose a source first');
+    const file=els.input.files?.[0];
+    const bytes=await createBg02Project(file,'video',saveVideoState());
+    const blob=new Blob([bytes],{type:'application/zip'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=(file.name.replace(/\.[^.]+$/,'')||'BG02-video')
+      .replace(/[^a-z0-9_-]/gi,'_')+'.bg02-project.zip';
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),15000);
+  }
+
+  async function openVideoProject(file) {
+    if(working||uploading||client.anyTransferring)
+      throw new Error('Finish active conversion/upload first');
+    const project=readBg02Project(new Uint8Array(await file.arrayBuffer()));
+    if(project.kind!=='video')throw new Error('This ZIP contains a picture project');
+    const original=new File([project.sourceBytes],project.sourceName,{
+      type:project.sourceMime,
+    });
+    const transfer=new DataTransfer();
+    transfer.items.add(original);
+    els.input.files=transfer.files;
+    await chooseFile();
+    if(!source)throw new Error('Project source video could not be opened');
+    const st=project.state;
+    const safeEnd=Math.min(source.durationSeconds,st.end);
+    const safeStart=Math.min(st.start,Math.max(0,safeEnd-.02));
+    els.start.value=String(safeStart);
+    els.end.value=String(Math.max(safeStart+.02,safeEnd));
+    els.seconds.value=String(st.seconds);
+    els.fps.value=String(st.fps);
+    els.quality.value=st.quality;
+    els.fit.value=st.fit;
+    els.loop.checked=st.loop;
+    els.gifHold.value=String(st.gifHold);
+    selectedGifFrames.clear();
+    if(source.kind==='gif'){
+      for(const index of st.frameIndices) {
+        if(index>=source.ends.length)
+          throw new Error('Saved GIF selection exceeds available frames');
+        selectedGifFrames.add(index);
+      }
+      els.gifUseFrames.checked=st.gifUseFrames && selectedGifFrames.size>0;
+    }
+    cropEditor.restore(st.crop);
+    syncMarkerLimits();
+    invalidated();
+    if(source.kind==='gif')void renderFramePage();
+    notify('Video/GIF project restored locally; reconvert before upload.');
+  }
+
   function download() {
     if (!converted) return;
     const blob = new Blob([converted.bytes], { type: 'video/x-msvideo' });
@@ -569,6 +653,15 @@ export function bindVideo({ client, log, toast, $ }) {
     }
   }
 
+  els.saveProject.addEventListener('click',()=> {
+    void saveVideoProject().catch(e=>notify('Project save failed: '+e.message,'err'));
+  });
+  els.openProject.addEventListener('click',()=>els.projectFile.click());
+  els.projectFile.addEventListener('change',()=>{
+    const file=els.projectFile.files?.[0];
+    els.projectFile.value='';
+    if(file)void openVideoProject(file).catch(e=>notify('Project open failed: '+e.message,'err'));
+  });
   els.pick.addEventListener('click', () => els.input.click());
   els.input.addEventListener('change', chooseFile);
   els.convert.addEventListener('click', convert);
