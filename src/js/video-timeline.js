@@ -62,8 +62,8 @@ export function planGifStoryboard({
   let holdDuration;
   if (holdSeconds != null) {
     holdDuration = Number(holdSeconds);
-    if (![1/3, 2/3, 1, 2].some(n => Math.abs(n - holdDuration) < 1e-6)) {
-      throw new Error('Frame hold must be 1/3, 2/3, 1 or 2 seconds');
+    if (!Number.isFinite(holdDuration) || holdDuration <= 0 || holdDuration > 12) {
+      throw new Error('Frame hold must be between 0 and 12 seconds');
     }
   } else {
     if (!Number.isInteger(holdFrames) || ![1, 2, 3, 6].includes(holdFrames)) {
