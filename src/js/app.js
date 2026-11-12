@@ -6,6 +6,8 @@ import { REPO_URL } from './protocol.js';
 import { resolveBadgeProfile, imageMatchesBadge } from './device-profile.js';
 import { bindAdvanced } from './advanced.js';
 import { bindVideo } from './video-ui.js';
+import { bindBg02Library } from './bg02-library-ui.js';
+import { estimatePictureStorage } from './picture-size.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -16,11 +18,15 @@ let transferring = false;
 let activeProfileKey = null;
 let previewGeneration = 0;
 let videoController = null;
+let libraryController = null;
 const cropper = new CircleCropEditor({
   canvas: $('#cropCanvas'),
   zoomInput: $('#cropZoom'),
   resetButton: $('#cropReset'),
-  onChange: ({zoom}) => { $('#cropZoomValue').textContent = zoom + '%'; },
+  onChange: ({zoom}) => {
+    $('#cropZoomValue').textContent = zoom + '%';
+    renderPictureSize();
+  },
 });
 function showCropper() {
   $('#dialPreview').hidden = true;
@@ -48,6 +54,58 @@ function setUploadStatus(message, state = '') {
   if (state) el.dataset.state = state;
   else delete el.dataset.state;
 }
+
+/**
+ * Picture QOL: exact output byte size and conservative badge allocation hint.
+ * RU50 is fixed-size (29,904 B) regardless of original picture or crop;
+ * the UI never claims an exact physical flash block size.
+ */
+function renderPictureSize(snapshot = client.getSnapshot()) {
+  const box = $('#pictureSizePreview');
+  const file = $('#imageInput').files?.[0];
+  const profile = resolveBadgeProfile(snapshot);
+  if (!file || !prepared) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  const estimated = estimatePictureStorage({
+    bg02: profile.bg02,
+    encodedBytes: prepared.bytes?.length ?? null,
+    sourceBytes: file.size,
+    availableBytes: snapshot?.freeStorage ?? null,
+  });
+  const dims = prepared.sourceWidth && prepared.sourceHeight
+    ? ' · ' + prepared.sourceWidth + '×' + prepared.sourceHeight + ' px'
+    : '';
+  $('#pictureSourceSize').textContent = formatBytes(file.size) + dims;
+  $('#pictureEncodedSize').textContent = estimated
+    ? formatBytes(estimated.encodedBytes) +
+      (profile.bg02 ? ' · RU50/ETC2 240×240 (exact)' : ' · encoded')
+    : 'Waiting for encoding';
+  $('#pictureAllocation').textContent = estimated?.allocationHint != null
+    ? '~' + formatBytes(estimated.allocationHint) + ' (8 KiB-rounded estimate)'
+    : 'Not established for this model';
+  const free = $('#pictureFreeSpace');
+  free.classList.remove('picture-too-large');
+  free.textContent = estimated?.availableBytes != null
+    ? '~' + formatBytes(estimated.availableBytes)
+    : 'Not reported';
+  if (estimated?.fits === false) free.classList.add('picture-too-large');
+  $('#pictureSpaceHint').textContent = profile.bg02
+    ? estimated?.fits === false
+      ? 'Estimated image allocation exceeds the last reported free space. ' +
+        'The picture will not fit without first freeing storage on the badge.'
+      : estimated?.freeAfterHint != null
+        ? 'Estimated free after upload: ~' +
+          formatBytes(estimated.freeAfterHint) +
+          '. The 8 KiB allocation rounding is empirical, not proven flash geometry.'
+        : 'The output is fixed-size RU50; connect BG02 to compare with its free storage. ' +
+          '8 KiB allocation rounding is only an estimate.'
+    : 'Estimated storage allocation is available only for BG02; ' +
+      'the selected image has not changed.';
+}
+
 
 function syncConnectionChrome() {
   const n = client.sessionCount;
@@ -239,11 +297,13 @@ function applyBadgeProfile(snapshot = client.getSnapshot()) {
   }
   updatePushChecklist();
   videoController?.update(snapshot);
+  libraryController?.update(snapshot);
 }
 
 function renderSnapshot(snap) {
   const s = snap || client.getSnapshot();
   applyBadgeProfile(s);
+  renderPictureSize(s);
   const battery = s.battery == null ? '—' : `${s.battery}%`;
 
   const fields = {
@@ -432,6 +492,8 @@ async function rebuildPreview() {
       next = {
         bytes:null, width:240, height:240,
         format:'ru50', source:'crop', name:file.name,
+        sourceWidth:image.naturalWidth || image.width,
+        sourceHeight:image.naturalHeight || image.height,
       };
       // Do not create a crop for an obsolete badge or image selection.
       if(token === previewGeneration &&
@@ -454,6 +516,7 @@ async function rebuildPreview() {
        resolveBadgeProfile(now).format !== next.format) return;
 
     prepared = next;
+    renderPictureSize(now);
     setUploadStatus(profile.bg02
       ? 'Picture ready. Adjust the crop if needed, then select Upload picture.'
       : 'Picture ready. Select Upload to badge.', 'ok');
@@ -485,6 +548,7 @@ async function rebuildPreview() {
     toast(e.message,'err');
     log({msg:e.message,level:'err'});
   } finally {
+    renderPictureSize();
     updatePushChecklist();
   }
 }
@@ -834,6 +898,7 @@ async function initBuildMeta() {
 
 bind();
 videoController = bindVideo({ client, log, toast, $ });
+libraryController = bindBg02Library({ client, log, $ });
 bindAdvanced({ client, log, toast, $ });
 initSupport();
 initBuildMeta();
