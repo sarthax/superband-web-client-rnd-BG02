@@ -57,7 +57,7 @@ export async function openVideoSource(file) {
         throw new Error('Only AVI clips up to 30s are accepted by this workbench');
       }
     } catch (e) {
-      throw new Error('AVI input must already be 240x240 MJPEG at 3 fps: ' + e.message);
+      throw new Error('AVI input must be 240x240 MJPEG at 3 fps (2/1/0.5 experimental): ' + e.message);
     }
     const posterUrl = URL.createObjectURL(
       new Blob([extractBg02AviFrame(bytes, 0)], { type: 'image/jpeg' }),
@@ -237,9 +237,10 @@ export async function convertVideoToBg02Avi(source, {
   start = 0,
   end = source.durationSeconds,
   seconds = 5,
+  fps = BG02_VIDEO.FPS,
   loop = false,
   frameIndices = null,
-  holdFrames = 1,
+  holdSeconds = 1 / 3,
   fit = 'cover',
   quality = 'medium',
   onProgress = () => {},
@@ -261,9 +262,9 @@ export async function convertVideoToBg02Avi(source, {
   const plan = storyboard
     ? planGifStoryboard({
       frameIndices, sourceFrameCount: source.ends.length,
-      holdFrames, maxSeconds: duration, loop,
+      holdSeconds, maxSeconds: duration, loop, fps,
     })
-    : planTrimmedVideo({ start: begin, end: stop, maxSeconds: duration, loop });
+    : planTrimmedVideo({ start: begin, end: stop, maxSeconds: duration, loop, fps });
   const opts = VIDEO_QUALITIES[quality];
   if (!opts) throw new Error('Unknown video quality preset');
   if (fit !== 'cover' && fit !== 'contain') throw new Error('Unknown picture fit');
@@ -300,7 +301,7 @@ export async function convertVideoToBg02Avi(source, {
     if (i % 5 === 4) await wait(0);
   }
   abortIf(signal);
-  const bytes = muxBg02MjpegAvi(frameBytes);
+  const bytes = muxBg02MjpegAvi(frameBytes, { fps });
   const info = inspectBg02MjpegAvi(bytes);
   return { bytes, info, thumbnail, quality, loop, plan, sourceName: source.name };
 }
