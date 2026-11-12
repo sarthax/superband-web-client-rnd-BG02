@@ -97,6 +97,46 @@ test('RCSP without target response returns timeout; never sends a second command
   const result=await probeBg02RcspTargetInfo(server,{timeoutMs:1000});
   assert.equal(result.timedOut,true);
   assert.equal(result.fileListingConfirmed,false);
+  assert.deepEqual(result.rxDiagnostics,{
+    notifications:0,bytes:0,rcspFrames:0,unmatchedFrames:0,
+  });
+  assert.match(result.notes,/No AE02 notifications/i);
   assert.equal(writes,1);
   assert.equal(stopped,1);
+});
+
+test('unmatched RCSP notification is distinguishable from silent AE02 timeout',async()=>{
+  let handler;
+  let writeCount=0;
+  const unrelated=Uint8Array.of(
+    0xfe,0xdc,0xba,0x00,0x07,0x00,0x02,0x00,0x00,0xef,
+  );
+  const notify={
+    properties:{notify:true},
+    async startNotifications(){},
+    addEventListener(_name,fn){handler=fn},
+    removeEventListener(){},
+    async stopNotifications(){},
+  };
+  const write={
+    properties:{writeWithoutResponse:true},
+    async writeValueWithoutResponse(){
+      writeCount++;
+      queueMicrotask(()=>handler({target:{
+        value:new DataView(unrelated.buffer,unrelated.byteOffset,unrelated.byteLength),
+      }}));
+    },
+  };
+  const server={connected:true,async getPrimaryService(){
+    return {async getCharacteristic(uuid){
+      return uuid===JIELI_OTA.WRITE?write:notify;
+    }};
+  }};
+  const result=await probeBg02RcspTargetInfo(server,{timeoutMs:1000});
+  assert.equal(result.timedOut,true);
+  assert.equal(writeCount,1);
+  assert.deepEqual(result.rxDiagnostics,{
+    notifications:1,bytes:unrelated.length,rcspFrames:1,unmatchedFrames:1,
+  });
+  assert.match(result.notes,/none matching/i);
 });
