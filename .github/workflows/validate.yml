@@ -34,7 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           bun install --frozen-lockfile
-          node --test tests/ru50.test.mjs tests/device-profile.test.mjs tests/browser-etc2.test.mjs tests/fitpro-bg02-storage.test.mjs tests/video-avi.test.mjs tests/video-timeline.test.mjs tests/video-crop.test.mjs
+          node --test tests/ru50.test.mjs tests/device-profile.test.mjs tests/browser-etc2.test.mjs tests/fitpro-bg02-storage.test.mjs tests/video-avi.test.mjs tests/video-timeline.test.mjs tests/video-crop.test.mjs tests/picture-qol.test.mjs
           bun run build
 
       - name: Check dist output
