@@ -248,7 +248,7 @@
                   <input id="videoEnd" type="range" min="0" max="1" value="1" step="0.1" disabled />
                 </div>
                 <div class="row">
-                  <label class="field">Clip length
+                  <label class="field">Maximum clip length
                     <select id="videoSeconds">
                       <option value="5" selected>5 seconds — verified</option>
                       <option value="10">10 seconds — unverified</option>
@@ -271,8 +271,31 @@
                     </select>
                   </label>
                 </div>
-                <label class="check"><input id="videoLoop" type="checkbox" checked /> Loop selected source segment to fill clip length</label>
-                <p id="videoRangeInfo" class="hint">Choose a source, then adjust the markers.</p>
+                <label class="check"><input id="videoLoop" type="checkbox" /> Repeat selected segment to fill the maximum length (off by default)</label>
+                <p id="videoRangeInfo" class="hint">The maximum duration never pads a shorter clip unless Repeat is enabled.</p>
+              </div>
+              <div id="gifFramePicker" class="gif-frame-picker" hidden>
+                <h3>GIF frame picker</h3>
+                <p class="hint">View the original frames and pick a few to make a smaller animated slideshow. Selected frames play in their original order, at the hold time you choose.</p>
+                <label class="check"><input type="checkbox" id="gifUseFrames" /> Encode only my selected GIF frames</label>
+                <div class="row gif-frame-controls">
+                  <button type="button" id="gifPrev" disabled>Previous 24</button>
+                  <span id="gifPage" class="muted">—</span>
+                  <button type="button" id="gifNext" disabled>Next 24</button>
+                  <label class="field">Show each picked frame for
+                    <select id="gifHold" disabled>
+                      <option value="1" selected>0.33 seconds</option>
+                      <option value="2">0.67 seconds</option>
+                      <option value="3">1 second</option>
+                      <option value="6">2 seconds</option>
+                    </select>
+                  </label>
+                  <button type="button" id="gifClear">Clear selected</button>
+                </div>
+                <p id="gifSelectedInfo" class="hint">No frames selected.</p>
+                <div id="gifFrameGrid" class="gif-frame-grid" aria-label="Original animated GIF frames"></div>
+              </div>
+              <div class="row">
               </div>
               <div class="row">
                 <button type="button" id="videoConvert" disabled>Convert &amp; measure AVI</button>
