@@ -310,6 +310,30 @@
                 <button type="button" id="videoDownload" disabled>Download AVI</button>
                 <button type="button" class="primary" id="videoUpload" disabled>Upload video</button>
               </div>
+              <section id="videoCompare" class="video-compare" hidden aria-label="Source and encoded AVI comparison">
+                <h3>Source vs. encoded AVI</h3>
+                <div class="video-compare-grid">
+                  <figure class="video-compare-pane">
+                    <figcaption id="videoCompareSourceCaption">Source (sampled before encoding)</figcaption>
+                    <canvas id="videoCompareSource" width="240" height="240" aria-label="Original sampled source frame"></canvas>
+                  </figure>
+                  <figure class="video-compare-pane">
+                    <figcaption>Generated AVI (decoded MJPEG frame)</figcaption>
+                    <canvas id="videoCompareEncoded" width="240" height="240" aria-label="Actual JPEG frame extracted from encoded AVI"></canvas>
+                  </figure>
+                </div>
+                <div class="video-compare-controls">
+                  <div class="row">
+                    <button type="button" id="videoComparePrevious">Previous frame</button>
+                    <button type="button" id="videoComparePlay">Play preview</button>
+                    <button type="button" id="videoCompareNext">Next frame</button>
+                    <span id="videoComparePosition" class="mono">Frame —</span>
+                  </div>
+                  <input id="videoCompareSeek" type="range" min="0" max="0" value="0" step="1"
+                    aria-label="Scrub synchronized AVI comparison frame" />
+                </div>
+                <p id="videoCompareDescription" class="hint"></p>
+              </section>
               <div class="video-output-preview">
                 <img id="videoOutputFrame" alt="First frame of encoded AVI" hidden />
                 <div>
