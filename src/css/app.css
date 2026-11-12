@@ -1018,3 +1018,27 @@ input[type='number'] {
   .picture-comparison-grid figcaption { font-size: .68rem; }
   .picture-comparison-grid small { font-size: .67rem; }
 }
+
+/* BG02 allocation-aware JPEG optimizer: quality rather than wasteful padding. */
+.picture-allocation-optimizer {
+  display: grid;
+  gap: .55rem;
+  padding: .65rem;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: rgba(0,0,0,.12);
+}
+.picture-allocation-optimizer[hidden] { display: none; }
+.picture-allocation-optimizer .row {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+.picture-allocation-optimizer button {
+  flex: 1 1 9rem;
+  font-size: .78rem;
+}
+.picture-allocation-optimizer .hint {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
