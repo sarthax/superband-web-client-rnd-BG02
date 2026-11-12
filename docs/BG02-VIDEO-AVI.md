@@ -24,7 +24,7 @@ The Loop checkbox means **repeat frames inside the converted AVI**. It does not 
 
 ## Storage and safety
 
-A real 29,904-byte picture consumed 32 KiB, consistent with allocation rounding in 8KiB increments. The upload preflight calculates ceil(AVI bytes / 8192) * 8192 and compares it to the freshly queried 0x20/4 free bytes. This rounding is an *estimate* from the observation, not a proven flash geometry. If the storage check fails or there is insufficient space, the video upload is blocked. No delete, format, or OTA commands are added.
+A real 29,904-byte picture consumed 32 KiB, consistent with allocation rounding in 8KiB increments. The upload preflight calculates ceil((AVI bytes + 4 length-prefix bytes) / 8192) * 8192 and compares it to the freshly queried 0x20/4 free bytes. This rounding is an *estimate* from the observation, not a proven flash geometry. If the storage check fails or there is insufficient space, the video upload is blocked. No delete, format, or OTA commands are added.
 
 The app writer can generate up to **30 seconds / 90 frames** for exploratory testing. That is a software ceiling, **not** a claim about BG02 video playback support. All durations beyond 5 seconds require manual verification.
 
