@@ -97,3 +97,98 @@ installed-file inventory.
 
 This branch does not implement deletion, file retrieval, firmware writes,
 or any unverified RCSP command.
+
+## Next slice: opt-in RCSP identity-only request (stacked PR)
+
+User's corrected live GATT output confirms:
+- `AE01`: **writeWithoutResponse**
+- `AE02`: **notify**
+- `AE00` and FitPro UART are both exposed.
+
+This completes the **GATT transport capability** check, but is not evidence
+of RCSP authentication, target-info support, or an installed-file list.
+
+**Critical protocol correction:** The older `src/js/jieli-ota.js`
+`buildRcspFrame` helper arranges length/sequence/opcode in an incompatible
+order. Do **not** reuse that helper for this probe or invoke `runJieliOta`.
+JieLi's documented RCSP envelope is:
+
+```
+FE DC BA | flags(1) | opcode(1) | BE16 bodyLen | body | EF
+```
+
+Request body starts with **sequence**; a response body starts with
+**status, sequence**. The new isolated
+`src/js/bg02-rcsp-target-info.js` implements that envelope only for
+the documented, read-only `GET_TARGET_INFO` opcode `0x03`.
+A common target-info parameter from published RCSP badge traces is
+`FF FF FF FF 00`, prefixed by the sequence number. The one request is:
+
+```
+FE DC BA C0 03 00 06 00 FF FF FF FF 00 EF
+```
+
+### Manual test
+
+1. Connect known BG02 V1.5; run **Check file-list interface**.
+2. Only if `AE00 transport candidate` appears, click
+   **Read RCSP target identity (one request)** and approve its confirmation.
+3. The browser starts `AE02` notifications, sends the single frame above
+   via `AE01.writeValueWithoutResponse`, and waits at most five seconds.
+   It matches opcode, direction and sequence, reassembles fragmented
+   notifications, and removes its listener/subscription afterward.
+4. Record the status message: **response received (status/length)**,
+   **timeout**, or **Bluetooth error**. The raw payload is deliberately not
+   logged/exported because it might include per-device identifiers.
+5. If a response arrives, the RCSP **identity request** is demonstrated.
+   It still does not establish auth success or file browse. If it times out,
+   auth or unsupported firmware remain possible. No automatic second request.
+
+**No** firmware update operations, file-list request, storage enumeration,
+unknown probing, deletion, formatting, or authentication bypass is performed.
+
+Vendor references:
+- https://doc.zh-jieli.com/SDKWiki/master/Jieli-Tech/WeChat-Mini-Program-OTA/3-bluetooth/2-ble-data-handler.html
+- https://github.com/jumpingmushroom/e87_badge/blob/main/docs/protocol.md
+- https://doc.zh-jieli.com/SDKWiki/master/Jieli-Tech/fw-AC63_BT_SDK/9-third-party-integrations/9.1-jl-rcsp.html
+
+## BG02 V35922 live result — target-info query timed out
+
+The user ran the single opt-in RCSP identity probe after confirming a
+writable AE01 / notifying AE02 transport. On the real BG02 V35922 /
+`LJ733_MB_V1.5`, **no matching GET_TARGET_INFO (0x03) response** was
+observed within five seconds. The browser did not report a GATT write
+failure or connection drop. The normal FitPro handshake/storage query
+continued to function, including candidate free space of
+151,552 bytes (148 KiB).
+
+Interpretation: **AE00 transport capability PASS; unauthenticated RCSP
+identity response NOT OBSERVED**. This does not establish that target-info,
+authentication, or file listing is absent. The original probe did not
+count unmatched AE02 notifications, so it cannot retrospectively
+distinguish a completely silent AE02 from a non-matching reply.
+
+JieLi explicitly documents that RCSP-enabled firmware requiring link
+authentication may remain silent in response to RCSP commands until
+authentication passes. The official SDK uses an authentication library
+and a device-specific key/configuration. **Do not copy an E87 or other
+badge's key or try guessed challenge/response packets** on the BG02.
+
+Sources:
+- https://doc.zh-jieli.com/Apps/Wechat/ota/zh-cn/master/developmentv2/development_desc.html
+- https://doc.zh-jieli.com/Apps/Android/health/en-us/master/Development/import.html
+- https://doc.zh-jieli.com/SDKWiki/master/Jieli-Tech/fw-AC63_BT_SDK/9-third-party-integrations/9.1-jl-rcsp.html
+
+The next maintenance commit adds privacy-safe receive counters
+(`notifications`, `bytes`, `rcspFrames`, `unmatchedFrames`) to the
+one-shot diagnostic. It never logs raw device identity bytes or sends
+additional commands automatically.
+
+**Recommended next research slice (rather than repeating the same probe):**
+inspect the exact SuperBand Android APK's BLE/authentication calls, or a
+short HCI capture while the official app opens installed media.
+Determine whether the app uses authenticated AE00 RCSP at all for the
+BG02 model, or only FitPro 7E40. If the app never uses AE00 for media
+management, avoid building an ungrounded RCSP file-browser client;
+concentrate on the official FitPro flows. Keep Baji media-delete and
+unverified JieLi opcodes disabled.

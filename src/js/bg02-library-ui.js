@@ -11,6 +11,7 @@
 import { formatBytes } from './image.js';
 import { resolveBadgeProfile } from './device-profile.js';
 import { probeBg02MediaTransport, mediaTelemetryDiff } from './bg02-media-capabilities.js';
+import { probeBg02RcspTargetInfo } from './bg02-rcsp-target-info.js';
 
 export function bindBg02Library({ client, $, log }) {
   const el = {
@@ -18,6 +19,8 @@ export function bindBg02Library({ client, $, log }) {
     read: $('#btnBg02LibraryInspect'),
     export: $('#btnBg02LibraryExport'),
     probe: $('#btnBg02MediaInterface'),
+    rcspIdentity: $('#btnBg02RcspIdentity'),
+    rcspStatus: $('#bg02RcspIdentityStatus'),
     transport: $('#bg02MediaTransport'),
     transportDetails: $('#bg02MediaTransportDetails'),
     entries: $('#bg02MediaEntries'),
@@ -30,6 +33,8 @@ export function bindBg02Library({ client, $, log }) {
   };
   let reading = false;
   let probing = false;
+  let identifying = false;
+  let targetInfo = null;
   let lastDiagnostic = null;
   let transport = null;
   let telemetry = [];
@@ -46,12 +51,31 @@ export function bindBg02Library({ client, $, log }) {
       // A different badge's readings are not comparable to this session.
       telemetry = [];
       transport = null;
+      targetInfo = null;
       lastDiagnostic = null;
       telemetrySessionId = snapshot.sessionId;
     }
-    el.read.disabled = !supported || reading || probing || client.anyTransferring;
-    el.probe.disabled = !supported || reading || probing || client.anyTransferring;
+    el.read.disabled = !supported || reading || probing || identifying ||
+      client.anyTransferring;
+    el.probe.disabled = !supported || reading || probing || identifying ||
+      client.anyTransferring;
+    el.rcspIdentity.disabled = !supported || reading || probing || identifying ||
+      client.anyTransferring ||
+      transport?.rcspService !== 'ae00-rcsp-transport-candidate';
+    el.rcspStatus.textContent = !supported
+      ? 'Not connected.'
+      : identifying
+        ? 'Sending one read-only GET_TARGET_INFO request on AE01; waiting for AE02…'
+        : targetInfo?.responseReceived
+          ? 'RCSP response received: opcode 0x03, status ' + targetInfo.status +
+            ', payload ' + targetInfo.payloadLength + ' bytes. No file list or ' +
+            'authentication capability has been established.'
+          : targetInfo?.timedOut
+            ? targetInfo.notes
+            : 'Not queried. Run the GATT interface check first, then opt in ' +
+              'to one read-only target-info request.';
     el.export.disabled = !supported || !lastDiagnostic || reading || probing ||
+      identifying ||
       lastDiagnostic.sessionId !== snapshot.sessionId;
     el.transport.textContent = !supported ? 'Not connected' :
       transport?.ae00Visible === true
@@ -89,6 +113,7 @@ export function bindBg02Library({ client, $, log }) {
     if (!supported) {
       lastDiagnostic = null;
       transport = null;
+      targetInfo = null;
       telemetry = [];
       telemetrySessionId = null;
       el.status.textContent =
@@ -128,6 +153,7 @@ export function bindBg02Library({ client, $, log }) {
         },
         requests: ['FitPro 0x20/2', 'FitPro 0x20/4'],
         transport: transport || { rcspService: 'not-checked', fileListingConfirmed: false },
+        rcspTargetInfo: targetInfo || { responseReceived: false, tested: false },
         mediaTelemetry: [...telemetry],
         dialInfo: {
           width: dial.width, height: dial.height,
@@ -178,7 +204,11 @@ export function bindBg02Library({ client, $, log }) {
       if (client.getSnapshot().sessionId !== snap.sessionId || !allowed())
         throw new Error('Active badge switched or disconnected');
       transport = result;
-      if (lastDiagnostic) lastDiagnostic.transport = result;
+      targetInfo = null;
+      if (lastDiagnostic) {
+        lastDiagnostic.transport = result;
+        lastDiagnostic.rcspTargetInfo = { responseReceived: false, tested: false };
+      }
       el.status.textContent = result.notes;
       log({ msg: 'BG02 media GATT capability: ' + result.rcspService +
         ' · no RCSP/list/delete command transmitted', level: 'info' });
@@ -188,6 +218,59 @@ export function bindBg02Library({ client, $, log }) {
       log({ msg: 'BG02 media GATT check: ' + e.message, level: 'warn' });
     } finally {
       probing = false;
+      update();
+    }
+  }
+
+  async function probeIdentity() {
+    const snap = client.getSnapshot();
+    if (!allowed(snap) || reading || probing || identifying ||
+        client.anyTransferring ||
+        transport?.rcspService !== 'ae00-rcsp-transport-candidate') return;
+    if (!window.confirm(
+      'Send ONE documented, read-only JieLi RCSP GET_TARGET_INFO (0x03) ' +
+      'request through AE01? This is not OTA or a media-list command. ' +
+      'A timeout is possible if authentication is needed. No retry or ' +
+      'file operation will follow.'
+    )) return;
+    const server = client.getActiveGattServer();
+    if (!server?.connected) {
+      el.status.textContent = 'No active connected GATT server.';
+      return;
+    }
+    identifying = true;
+    targetInfo = null;
+    el.status.textContent = 'One RCSP target-info request in progress; no OTA or file command…';
+    update(snap);
+    try {
+      const result = await probeBg02RcspTargetInfo(server, {
+        timeoutMs: 5000,
+        checkCurrent: () => client.getSnapshot().sessionId === snap.sessionId &&
+          allowed() && !client.anyTransferring,
+      });
+      if (client.getSnapshot().sessionId !== snap.sessionId || !allowed()) {
+        throw new Error('Badge changed or disconnected during RCSP query');
+      }
+      targetInfo = result;
+      if (lastDiagnostic) lastDiagnostic.rcspTargetInfo = result;
+      el.status.textContent = result.notes;
+      const rx = result.rxDiagnostics;
+      log({ msg: 'BG02 RCSP read-only 0x03: ' +
+        (result.responseReceived
+          ? 'response status=' + result.status + ' bytes=' + result.payloadLength
+          : 'timeout; likely auth or unsupported command') +
+        '; AE02 notifications=' + (rx?.notifications ?? 0) +
+        ', bytes=' + (rx?.bytes ?? 0) +
+        ', complete RCSP frames=' + (rx?.rcspFrames ?? 0) +
+        ', unmatched=' + (rx?.unmatchedFrames ?? 0) +
+        '; no file or OTA operation sent',
+        level: result.responseReceived ? 'ok' : 'warn' });
+    } catch (e) {
+      targetInfo = null;
+      el.status.textContent = 'RCSP identity read failed: ' + e.message;
+      log({ msg: 'BG02 RCSP identity: ' + e.message, level: 'warn' });
+    } finally {
+      identifying = false;
       update();
     }
   }
@@ -210,6 +293,7 @@ export function bindBg02Library({ client, $, log }) {
 
   el.read.addEventListener('click', () => void inspect());
   el.probe.addEventListener('click', () => void probeInterface());
+  el.rcspIdentity.addEventListener('click', () => void probeIdentity());
   el.export.addEventListener('click', exportDiagnostic);
   update();
   return { update };
