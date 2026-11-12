@@ -266,7 +266,7 @@ function renderSnapshot(snap) {
   const storageHint = s.freeStorageSource === 'fitpro-0x20/4-provisional'
     ? 'BG02 FitPro 0x20/4, read-only: second u32 is a candidate for free media bytes. Compare with SuperBand app.'
     : '';
-  $('[data-field="free"], [data-glance="free"]').forEach((el) => {
+  $$('[data-field="free"], [data-glance="free"]').forEach((el) => {
     el.title = storageHint;
   });
 
