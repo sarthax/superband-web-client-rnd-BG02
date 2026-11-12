@@ -7,6 +7,7 @@
  */
 import { BG02_VIDEO, muxBg02MjpegAvi, inspectBg02MjpegAvi, extractBg02AviFrame } from './video-avi.js';
 import { planTrimmedVideo, planGifStoryboard } from './video-timeline.js';
+import { defaultVideoCrop, drawVideoCrop } from './video-crop.js';
 
 export const VIDEO_QUALITIES = Object.freeze({
   low: { label: 'Low', jpegQuality: 0.30 },
@@ -161,12 +162,13 @@ function gifSampler(source) {
     // Chrome's ImageDecoder composites GIF disposal/transparency per frame.
     // It returns a VideoFrame: close it as soon as the canvas has sampled it.
     const { image } = await source.decoder.decode({ frameIndex: l });
-    return image;
+    return { image, index: l };
   };
 }
 
-/** Decode a single original GIF frame as a thumbnail for manual selection. */
-export async function gifFrameThumbnail(source, index) {
+/** Decode one GIF frame and render it with the SAME crop as AVI encoding. */
+export async function gifFrameThumbnail(source, index,
+  crop = defaultVideoCrop(), fit = 'cover') {
   if (source?.kind !== 'gif' || !Number.isInteger(index) ||
       index < 0 || index >= source.ends.length) {
     throw new Error('Unknown GIF frame');
@@ -176,12 +178,7 @@ export async function gifFrameThumbnail(source, index) {
     const canvas = document.createElement('canvas');
     canvas.width = 112; canvas.height = 112;
     const ctx = canvas.getContext('2d', { alpha: false });
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const scale = Math.min(canvas.width / source.width, canvas.height / source.height);
-    const width = source.width * scale, height = source.height * scale;
-    ctx.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2,
-      width, height);
+    drawVideoCrop(ctx, image, source.width, source.height, crop, fit);
     return canvas.toDataURL('image/jpeg', 0.65);
   } finally {
     image.close();
@@ -202,16 +199,6 @@ async function seekVideo(source, seconds, signal) {
   await new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
-function coverOrContain(ctx, picture, sourceWidth, sourceHeight, fit) {
-  const w = BG02_VIDEO.WIDTH, h = BG02_VIDEO.HEIGHT;
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, w, h);
-  const scale = fit === 'contain' ?
-    Math.min(w / sourceWidth, h / sourceHeight) :
-    Math.max(w / sourceWidth, h / sourceHeight);
-  const dw = sourceWidth * scale, dh = sourceHeight * scale;
-  ctx.drawImage(picture, (w - dw) / 2, (h - dh) / 2, dw, dh);
-}
 
 async function jpegFromCanvas(canvas, quality) {
   const blob = await new Promise((resolve) =>
@@ -242,6 +229,8 @@ export async function convertVideoToBg02Avi(source, {
   frameIndices = null,
   holdSeconds = 1 / 3,
   fit = 'cover',
+  sharedCrop = defaultVideoCrop(),
+  frameCropOverrides = null,
   quality = 'medium',
   onProgress = () => {},
   signal = null,
@@ -284,18 +273,26 @@ export async function convertVideoToBg02Avi(source, {
   try {
   for (let i = 0; i < total; i++) {
     abortIf(signal);
-    let picture;
+    let picture, originalGifIndex = null;
     if (storyboard) {
-      const { image } = await source.decoder.decode({ frameIndex: plan.frameIndexes[i] });
+      originalGifIndex = plan.frameIndexes[i];
+      const { image } = await source.decoder.decode({ frameIndex: originalGifIndex });
       picture = image;
     } else if (source.kind === 'gif') {
-      picture = await renderGif(plan.sourceTimes[i]);
+      const result = await renderGif(plan.sourceTimes[i]);
+      picture = result.image;
+      originalGifIndex = result.index;
     } else {
       await seekVideo(source, plan.sourceTimes[i], signal);
       picture = source.video;
     }
     try {
-      coverOrContain(ctx, picture, source.width, source.height, fit);
+      const override = source.kind === 'gif' && originalGifIndex != null
+        ? (frameCropOverrides instanceof Map
+          ? frameCropOverrides.get(originalGifIndex)
+          : frameCropOverrides?.[originalGifIndex]) : null;
+      drawVideoCrop(ctx, picture, source.width, source.height,
+        override || sharedCrop, fit);
     } finally {
       if (source.kind === 'gif') picture.close();
     }
