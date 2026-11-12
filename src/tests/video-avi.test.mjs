@@ -4,6 +4,7 @@ import {
   BG02_VIDEO,
   muxBg02MjpegAvi,
   inspectBg02MjpegAvi,
+  extractBg02AviFrame,
   estimateVideoAllocation,
 } from '../js/video-avi.js';
 
@@ -55,4 +56,13 @@ test('reject non AVI and wrong dimensions/rates before transfer', () => {
   assert.throws(() => muxBg02MjpegAvi([fakeJpeg], { width: 360 }));
   assert.throws(() => muxBg02MjpegAvi([fakeJpeg], { fps: 12 }));
   assert.throws(() => muxBg02MjpegAvi([new Uint8Array(150)]));
+});
+
+test('existing AVI can be passed through unchanged with first frame extracted', () => {
+  const avi = muxBg02MjpegAvi([fakeJpeg, fakeJpeg, fakeJpeg]);
+  const first = extractBg02AviFrame(avi, 0);
+  const third = extractBg02AviFrame(avi, 2);
+  assert.deepEqual([...first], [...fakeJpeg]);
+  assert.deepEqual([...third], [...fakeJpeg]);
+  assert.throws(() => extractBg02AviFrame(avi, 3));
 });
