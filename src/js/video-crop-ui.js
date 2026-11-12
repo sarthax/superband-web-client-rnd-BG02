@@ -28,6 +28,7 @@ export class VideoCropEditor {
       resetFrame: $('#videoCropResetFrame'),
       useShared: $('#videoCropUseShared'),
       applyAll: $('#videoCropApplyAll'),
+      applyEvery: $('#videoCropApplyEvery'),
       resetAll: $('#videoCropResetAll'),
       hint: $('#videoCropHint'),
       frameGrid: $('#gifFrameGrid'),
@@ -201,6 +202,20 @@ export class VideoCropEditor {
     this.scheduleThumbs();
   }
 
+  applyToEveryFrame() {
+    if (!this.source || this.source.kind !== 'gif' || !this.canEdit()) return;
+    // O(1) for even 1,500-frame GIFs: use the current framing as the shared
+    // default and remove individual overrides. No giant per-frame map needed.
+    this.shared = copyVideoCrop(this.currentCrop());
+    this.overrides.clear();
+    this.mode = 'shared';
+    this.onChanged();
+    this.updateControls();
+    this.syncFrameCards();
+    void this.render();
+    this.scheduleThumbs();
+  }
+
   resetAll() {
     if (!this.source || !this.canEdit()) return;
     this.shared = defaultVideoCrop();
@@ -237,7 +252,7 @@ export class VideoCropEditor {
   updateControls() {
     const { root, zoom, zoomLabel, prev, next, label,
       modeShared, modeFrame, resetFrame, useShared, applyAll,
-      resetAll, hint, canvas } = this.els;
+      applyEvery, resetAll, hint, canvas } = this.els;
     const ready = Boolean(this.source);
     const gif = this.source?.kind === 'gif';
     const selectedCount = this.selectedFrames.size;
@@ -251,6 +266,7 @@ export class VideoCropEditor {
     useShared.disabled = !interactive || !activeIsSelected ||
       !this.overrides.has(this.active);
     applyAll.disabled = !interactive || !gif || !selectedCount;
+    applyEvery.disabled = !interactive || !gif;
     canvas.style.pointerEvents = interactive ? 'auto' : 'none';
     modeShared.setAttribute('aria-pressed', String(this.mode === 'shared'));
     modeFrame.setAttribute('aria-pressed', String(this.editingFrame()));
@@ -335,6 +351,7 @@ export class VideoCropEditor {
     e.resetFrame.addEventListener('click', () => this.resetCurrent());
     e.useShared.addEventListener('click', () => this.useShared());
     e.applyAll.addEventListener('click', () => this.applyAllSelected());
+    e.applyEvery.addEventListener('click', () => this.applyToEveryFrame());
     e.resetAll.addEventListener('click', () => this.resetAll());
     e.prev.addEventListener('click', () => this.nextSelected(-1));
     e.next.addEventListener('click', () => this.nextSelected(1));
