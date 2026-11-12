@@ -22,6 +22,7 @@ export function validateBg02Jpeg(bytes) {
 
 export async function prepareBg02PictureComparison(imageData, {
   jpegQuality = BG02_JPEG_DEFAULT_QUALITY,
+  preparedJpegBytes = null,
 } = {}) {
   if (!imageData || imageData.width !== 240 || imageData.height !== 240 ||
       !imageData.data || imageData.data.length !== 240 * 240 * 4) {
@@ -32,7 +33,10 @@ export async function prepareBg02PictureComparison(imageData, {
     throw new Error('Experimental JPEG quality must be 35–90');
   }
 
-  const jpegBytes = encodeBaselineJpeg444(imageData, { quality: jpegQuality });
+  // The optimizer can supply the EXACT tested JPEG; do not encode it again
+  // and inadvertently change the bytes selected for upload.
+  const jpegBytes = preparedJpegBytes ??
+    encodeBaselineJpeg444(imageData, { quality: jpegQuality });
   const jpegInfo = validateBg02Jpeg(jpegBytes);
   const ru50Bytes = await encodeImageDataRu50(imageData);
   inspectRu50(ru50Bytes);

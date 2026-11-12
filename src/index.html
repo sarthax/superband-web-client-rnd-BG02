@@ -157,8 +157,17 @@
                   </label>
                   <label class="field" id="pictureJpegQualityWrap" for="pictureJpegQuality" hidden>
                     JPEG quality <span id="pictureJpegQualityLabel">65</span>
-                    <input id="pictureJpegQuality" type="range" min="35" max="90" step="5" value="65" />
+                    <input id="pictureJpegQuality" type="range" min="35" max="90" step="1" value="65" />
                   </label>
+                </div>
+                <div id="pictureAllocationOptimizer" class="picture-allocation-optimizer" hidden>
+                  <p class="hint">Badge storage is allocated in 8 KiB blocks. Find the highest JPEG quality that fits the current block, or try a block smaller/larger. No padding or upload occurs.</p>
+                  <div class="row">
+                    <button type="button" id="pictureOptimizeSmaller" title="Try to save one 8 KiB block; may need lower JPEG quality">Use 8 KiB less</button>
+                    <button type="button" id="pictureOptimizeCurrent" title="Highest JPEG quality within the currently measured allocation">Best quality in this block</button>
+                    <button type="button" id="pictureOptimizeLarger" title="Allow one extra 8 KiB block for higher JPEG quality">Allow 8 KiB more</button>
+                  </div>
+                  <p id="pictureOptimizeInfo" class="hint" role="status">Convert once to establish the allocation block, or optimize directly using the current JPEG quality.</p>
                 </div>
                 <div class="row">
                   <button type="button" id="pictureCompareBuild">Convert &amp; compare</button>
