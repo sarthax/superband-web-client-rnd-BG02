@@ -66,3 +66,38 @@ test('existing AVI can be passed through unchanged with first frame extracted', 
   assert.deepEqual([...third], [...fakeJpeg]);
   assert.throws(() => extractBg02AviFrame(avi, 3));
 });
+
+test('AVI uses exact rational headers at experimental frame rates', () => {
+  const timebases = [
+    {fps: 3, rate: 3, scale: 1, microseconds: 333333, frames: 15, seconds: 5},
+    {fps: 2, rate: 2, scale: 1, microseconds: 500000, frames: 10, seconds: 5},
+    {fps: 1, rate: 1, scale: 1, microseconds: 1000000, frames: 5, seconds: 5},
+    // Under a strict 5s maximum: only two 2s frames fit (4s actual).
+    {fps: 0.5, rate: 1, scale: 2, microseconds: 2000000, frames: 2, seconds: 4},
+  ];
+  for (const t of timebases) {
+    const avi = muxBg02MjpegAvi(Array(t.frames).fill(fakeJpeg), { fps: t.fps });
+    const info = inspectBg02MjpegAvi(avi);
+    assert.equal(info.fps, t.fps);
+    assert.equal(info.frames, t.frames);
+    assert.equal(info.seconds, t.seconds);
+    const tags = (tag) => {
+      for (let i = 0; i < avi.length - 4; i++) {
+        if (fourCC(avi, i) === tag) return i;
+      }
+      throw new Error('Missing AVI chunk: ' + tag);
+    };
+    const avih = tags('avih');
+    const strh = tags('strh');
+    assert.equal(read32(avi, avih + 8), t.microseconds, 'avih timebase ' + t.fps);
+    assert.equal(read32(avi, strh + 8 + 20), t.scale, 'dwScale ' + t.fps);
+    assert.equal(read32(avi, strh + 8 + 24), t.rate, 'dwRate ' + t.fps);
+    assert.equal(read32(avi, strh + 8 + 32), t.frames, 'dwLength ' + t.fps);
+  }
+});
+
+test('reject unsupported fractional rates and overlong AVI at low fps', () => {
+  assert.throws(() => muxBg02MjpegAvi([fakeJpeg], { fps: 0.75 }));
+  assert.throws(() => muxBg02MjpegAvi([fakeJpeg], { fps: 12 }));
+  assert.throws(() => muxBg02MjpegAvi(Array(16).fill(fakeJpeg), { fps: 0.5 }));
+});
