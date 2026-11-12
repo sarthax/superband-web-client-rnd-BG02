@@ -198,6 +198,36 @@ export function inspectBg02MjpegAvi(input) {
   };
 }
 
+/** Pull an MJPEG still from a known-compatible AVI for a source thumbnail. */
+export function extractBg02AviFrame(input, frameIndex = 0) {
+  const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+  inspectBg02MjpegAvi(bytes);
+  if (!Number.isInteger(frameIndex) || frameIndex < 0) {
+    throw new Error('Invalid AVI frame index');
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const read = (o) => view.getUint32(o, true);
+  for (let p = 12; p + 12 <= bytes.length;) {
+    const size = read(p + 4);
+    const end = p + 8 + size;
+    if (end > bytes.length) break;
+    if (ascii(bytes, p) === 'LIST' && ascii(bytes, p + 8) === 'movi') {
+      let n = 0;
+      for (let q = p + 12; q + 8 <= end;) {
+        const chunkSize = read(q + 4);
+        if (q + 8 + chunkSize > end) break;
+        if (ascii(bytes, q) === '00dc') {
+          if (n === frameIndex) return bytes.slice(q + 8, q + 8 + chunkSize);
+          n++;
+        }
+        q += 8 + chunkSize + (chunkSize & 1);
+      }
+    }
+    p = end + (size & 1);
+  }
+  throw new Error('Requested AVI frame not found');
+}
+
 /** Rounded allocation is an empirical hint, not a proven erase-block map. */
 export function estimateVideoAllocation(bytes) {
   // Upload adds a four-byte length prefix before the AVI bytes.
