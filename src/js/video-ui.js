@@ -293,8 +293,10 @@ export function bindVideo({ client, log, toast, $ }) {
     const to = Math.min(total, from + FRAMES_PER_PAGE);
     els.gifPage.textContent = 'Frames ' + (from + 1) + '–' + to +
       ' of ' + total + ' (page ' + (framePage + 1) + '/' + pages + ')';
-    els.gifFrameGrid.replaceChildren();
     refresh();
+    // Build the new page off-screen and swap once: clearing the grid first
+    // collapses the page height and makes the view jump on every crop edit.
+    const frag = document.createDocumentFragment();
     for (let i = from; i < to; i++) {
       let poster;
       try {
@@ -348,9 +350,13 @@ export function bindVideo({ client, log, toast, $ }) {
         cropEditor.els.root.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       });
       tile.append(button, edit);
-      els.gifFrameGrid.appendChild(tile);
-      cropEditor.syncFrameCards();
+      frag.appendChild(tile);
     }
+    if (token !== thumbnailEpoch || source !== original) return;
+    const scrollY = window.scrollY;
+    els.gifFrameGrid.replaceChildren(frag);
+    cropEditor.syncFrameCards();
+    window.scrollTo(window.scrollX, scrollY);
   }
 
   function setPreset() {

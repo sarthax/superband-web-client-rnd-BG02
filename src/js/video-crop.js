@@ -10,7 +10,7 @@
  * mask is CSS-only, just as in the existing picture cropper.
  */
 export const VIDEO_CROP_SIZE = 240;
-export const VIDEO_CROP_MIN_ZOOM = 1;
+export const VIDEO_CROP_MIN_ZOOM = 0.25;
 export const VIDEO_CROP_MAX_ZOOM = 4;
 
 export function defaultVideoCrop() {
