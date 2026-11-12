@@ -162,7 +162,7 @@ export function bindVideo({ client, log, toast, $ }) {
     if (working || uploading) return;
     const file = els.input.files?.[0];
     if (!file) return;
-    generation++;
+    const request = ++generation;
     source?.close();
     source = null;
     clearOutput();
@@ -176,6 +176,7 @@ export function bindVideo({ client, log, toast, $ }) {
     notify('Reading video metadata or GIF frames…');
     try {
       const candidate = await openVideoSource(file);
+      if (request !== generation) { candidate.close(); return; }
       source = candidate;
       els.sourceDetails.textContent = candidate.name + ' · ' +
         candidate.width + '×' + candidate.height + ' · ' +
@@ -198,6 +199,7 @@ export function bindVideo({ client, log, toast, $ }) {
       notify('Adjust the selection, then convert and measure its actual AVI size.');
       refresh();
     } catch (e) {
+      if (request !== generation) return;
       els.sourceDetails.textContent = file.name + ' · cannot decode';
       notify(e.message, 'err');
       refresh();
@@ -294,6 +296,9 @@ export function bindVideo({ client, log, toast, $ }) {
         );
       }
       const activeId = snap.sessionId;
+      if (client.getSnapshot().sessionId !== activeId) {
+        throw new Error('Active badge changed during storage preflight');
+      }
       const result = await client.transferVideoAvi(item.bytes, {
         onProgress: (pct) => progress(
           Math.max(1, Math.min(100, Math.round(Number(pct) || 0))),
