@@ -5,7 +5,7 @@ Input is directories produced by jl-misctools fwunpack_newfw.py. Output is
 metadata and SHA-256 hashes only; never reassembles or modifies OTA images.
 
 Equal hashes prove identical *extracted file bytes*. App overlap probes use
-exact 1-KiB anchors, not semantic function similarity or flash compatibility.
+exact 1-KiB anchors at every possible byte offset, not semantic similarity or flash compatibility.
 """
 import argparse
 import hashlib
@@ -79,32 +79,36 @@ def scan_image(label, root):
     }
 
 
-def exact_anchor_share(a, b, block=1024, step=256):
-    """Count non-overlapping full-block slices of A that also exist in B.
+def exact_anchor_share(a, b, block=1024):
+    """Count non-overlapping full-block slices of A found ANYWHERE in B.
 
-    This is a *lower-bound, location-shift-tolerant exact-match metric*.
-    It is NOT a statement that remaining bytes are different in function.
-    Ignore runs with very low byte diversity to avoid padding bias.
+    This is a lower-bound exact-match anchor metric, NOT functional similarity.
+    Native bytes.find avoids the sampling-alignment false negatives introduced
+    by comparing only 256-byte spaced offsets from B.
     """
     def high_information(chunk):
         return len(set(chunk)) > 16
-    hashes = {
-        sha(b[j:j+block])
-        for j in range(0, max(0, len(b)-block+1), step)
-        if high_information(b[j:j+block])
-    }
     valid = matching = 0
+    example_matches = []
     for j in range(0, max(0, len(a)-block+1), block):
         x = a[j:j+block]
         if not high_information(x):
             continue
         valid += 1
-        matching += sha(x) in hashes
+        found = b.find(x)
+        if found >= 0:
+            matching += 1
+            if len(example_matches) < 6:
+                example_matches.append({
+                    "offset_a": j, "offset_b": found,
+                    "shift_b_minus_a": found - j,
+                })
     return {
-        "block_bytes": block, "candidate_stride_bytes": step,
+        "block_bytes": block, "destination_search": "all byte offsets",
         "high_information_blocks_in_a": valid,
         "exact_matches_from_a_somewhere_in_b": matching,
         "share_percent_of_a_blocks": round(100 * matching / valid, 2) if valid else None,
+        "example_matches": example_matches,
         "excludes_low_diversity_blocks": True,
     }
 
@@ -163,6 +167,14 @@ def main():
         print(f"IMAGE {im['label']}: files={im['member_count']} app={im['app_bytes']} "
               f"app_sha256={im['app_sha256']} SDK={im['sdk_banners']}")
         print("  RESOURCE_MEMBER_NAMES", json.dumps(im["resource_member_candidates"][:32]))
+        for fname in ("files/p11_code.bin", "files/ui_upgrade-extracted/upgrade.sty",
+                      "files/tone_en-extracted/game_ballon.wtg",
+                      "files/tone_en-extracted/game_muyv.wtg",
+                      "files/tone_en-extracted/find_tone.wtg",
+                      "files/tone_en-extracted/key_tone.wtg"):
+            entry = im["members"].get(fname)
+            if entry:
+                print(f"  COMPONENT {fname} bytes={entry['bytes']} sha256={entry['sha256']}")
         print("  APP_STRING_MARKERS", json.dumps(im["app_resource_string_candidates"][:25]))
     for p in results["pairs"]:
         print(f"PAIR {p['a']} vs {p['b']}")
