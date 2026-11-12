@@ -71,8 +71,7 @@ export function bindBg02Library({ client, $, log }) {
             ', payload ' + targetInfo.payloadLength + ' bytes. No file list or ' +
             'authentication capability has been established.'
           : targetInfo?.timedOut
-            ? 'No matching RCSP response within five seconds. Authentication ' +
-              'or firmware support is unknown; no automatic retry.'
+            ? targetInfo.notes
             : 'Not queried. Run the GATT interface check first, then opt in ' +
               'to one read-only target-info request.';
     el.export.disabled = !supported || !lastDiagnostic || reading || probing ||
@@ -255,11 +254,17 @@ export function bindBg02Library({ client, $, log }) {
       targetInfo = result;
       if (lastDiagnostic) lastDiagnostic.rcspTargetInfo = result;
       el.status.textContent = result.notes;
+      const rx = result.rxDiagnostics;
       log({ msg: 'BG02 RCSP read-only 0x03: ' +
         (result.responseReceived
           ? 'response status=' + result.status + ' bytes=' + result.payloadLength
-          : 'timeout; possible authentication or unsupported command') +
-        '; no file or OTA operation sent', level: result.responseReceived ? 'ok' : 'warn' });
+          : 'timeout; likely auth or unsupported command') +
+        '; AE02 notifications=' + (rx?.notifications ?? 0) +
+        ', bytes=' + (rx?.bytes ?? 0) +
+        ', complete RCSP frames=' + (rx?.rcspFrames ?? 0) +
+        ', unmatched=' + (rx?.unmatchedFrames ?? 0) +
+        '; no file or OTA operation sent',
+        level: result.responseReceived ? 'ok' : 'warn' });
     } catch (e) {
       targetInfo = null;
       el.status.textContent = 'RCSP identity read failed: ' + e.message;
