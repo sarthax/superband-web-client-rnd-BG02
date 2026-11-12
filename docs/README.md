@@ -20,6 +20,7 @@ Documentation for the SuperBand electronic badge BLE stack from RnD investigatio
 | [Firmware OTA](protocol/ota-firmware.md) | JieLi OTA check API, DG01 / BJ-1 / LJ733 zip URLs |
 | [Security research](protocol/security.md) | OTA risks, public CDN, UART auth gaps, backdoor notes |
 | [Firmware hardware](protocol/firmware-hw.md) | SoC / flash / touch / GPU findings from UFW analysis |
+| [Future BG02 spare: wired USB/UART readback](BG02-FUTURE-SPARE-HARDWARE-READBACK.md) | Deferred spare-unit PCB inspection, E87 USB reference, safe read-only stock-firmware backup plan |
 | [Firmware contract](protocol/firmware-contract.md) | Clean-room FW host-visible contract (dial31 + Stage 2) |
 | [Firmware rewrite](firmware-rewrite/README.md) | SDK gate, RE map, dial-info captures, Stage 1/2 track |
 | [Tools](../tools/README.md) | download / analyze / **send-ota** / unpack helpers |
