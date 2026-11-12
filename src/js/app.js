@@ -252,7 +252,8 @@ function renderSnapshot(snap) {
     manufacturer: dash(s.manufacturer),
     battery,
     protocol: dash(s.protocol),
-    free: fmtBig(s.freeStorage),
+    free: s.freeStorageSource === 'fitpro-0x20/4-provisional'
+      ? `~${fmtBig(s.freeStorage)}` : fmtBig(s.freeStorage),
     cap: fmtBig(s.storageCapacity),
   };
 
@@ -261,6 +262,13 @@ function renderSnapshot(snap) {
       el.textContent = val;
     });
   }
+
+  const storageHint = s.freeStorageSource === 'fitpro-0x20/4-provisional'
+    ? 'BG02 FitPro 0x20/4, read-only: second u32 is a candidate for free media bytes. Compare with SuperBand app.'
+    : '';
+  $('[data-field="free"], [data-glance="free"]').forEach((el) => {
+    el.title = storageHint;
+  });
 
   const glance = {
     name: fields.name,
