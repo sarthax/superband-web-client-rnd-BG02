@@ -111,3 +111,47 @@ export async function encodeEtc2Rgb(imageData) {
   }
   return bytes;
 }
+
+/**
+ * Decode our own ETC1 individual-mode subset of ETC2 RGB8 into RGBA for
+ * comparison previews. This intentionally rejects ETC2 modes our browser
+ * encoder never emits; it is NOT a general-purpose vendor RU50 decoder.
+ * The result is pixels decoded from the actual compressed ETC2 bytes.
+ */
+export function decodeEtc2IndividualRgb(bytes, width = 240, height = 240) {
+  if (!(bytes instanceof Uint8Array) || !Number.isInteger(width) ||
+      !Number.isInteger(height) || width <= 0 || height <= 0 ||
+      width % 4 || height % 4 || bytes.length !== width * height / 2) {
+    throw new Error('Invalid ETC2 RGB8 data for comparison');
+  }
+  const rgba = new Uint8ClampedArray(width * height * 4);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  for (let by = 0, offset = 0; by < height; by += 4) {
+    for (let bx = 0; bx < width; bx += 4, offset += 8) {
+      const hi = view.getUint32(offset, false);
+      const lo = view.getUint32(offset + 4, false);
+      if (hi & 2) {
+        throw new Error('RU50 preview supports only browser-generated ETC1 individual mode');
+      }
+      const flip = hi & 1;
+      for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+          const second = flip ? y >= 2 : x >= 2;
+          const base = second
+            ? [(hi >>> 24) & 15, (hi >>> 16) & 15, (hi >>> 8) & 15]
+            : [(hi >>> 28) & 15, (hi >>> 20) & 15, (hi >>> 12) & 15];
+          const table = second ? (hi >>> 2) & 7 : (hi >>> 5) & 7;
+          const k = x * 4 + y;
+          const selector = ((lo >>> k) & 1) | (((lo >>> (k + 16)) & 1) << 1);
+          const modifier = MODIFIERS[table][selector];
+          const at = ((by + y) * width + bx + x) * 4;
+          rgba[at] = clamp255(base[0] * 17 + modifier);
+          rgba[at + 1] = clamp255(base[1] * 17 + modifier);
+          rgba[at + 2] = clamp255(base[2] * 17 + modifier);
+          rgba[at + 3] = 255;
+        }
+      }
+    }
+  }
+  return { width, height, data: rgba };
+}

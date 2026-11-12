@@ -146,6 +146,47 @@
               <label class="check" id="allocMediaOption"
                 ><input type="checkbox" id="allocMedia" checked /> Allocate media ID</label
               >
+              <section id="pictureCodecControls" class="picture-codec-controls" hidden>
+                <h3>Choose picture encoding</h3>
+                <div class="row">
+                  <label class="field" for="pictureCodec">Badge picture format
+                    <select id="pictureCodec">
+                      <option value="ru50" selected>RU50 / ETC2 — current working default</option>
+                      <option value="jpeg444">JPEG 4:4:4 — experimental, smaller files</option>
+                    </select>
+                  </label>
+                  <label class="field" id="pictureJpegQualityWrap" for="pictureJpegQuality" hidden>
+                    JPEG quality <span id="pictureJpegQualityLabel">65</span>
+                    <input id="pictureJpegQuality" type="range" min="35" max="90" step="5" value="65" />
+                  </label>
+                </div>
+                <div class="row">
+                  <button type="button" id="pictureCompareBuild">Convert &amp; compare</button>
+                  <span id="pictureComparePrompt" class="hint">Select an image, set its crop, then compare both formats before uploading.</span>
+                </div>
+              </section>
+              <section id="pictureComparison" class="picture-comparison" hidden>
+                <h3>Original vs. actual compressed pictures</h3>
+                <div class="picture-comparison-grid">
+                  <figure>
+                    <figcaption>Source crop</figcaption>
+                    <canvas id="pictureCompareSource" width="240" height="240" aria-label="240 pixel source crop before compression"></canvas>
+                    <small>No compression</small>
+                  </figure>
+                  <figure id="pictureRu50Pane" data-selected="true">
+                    <figcaption>RU50 / ETC2</figcaption>
+                    <canvas id="pictureCompareRu50" width="240" height="240" aria-label="Actual RU50 ETC2 decoded preview"></canvas>
+                    <small id="pictureRu50Bytes">—</small>
+                  </figure>
+                  <figure id="pictureJpegPane" data-selected="false">
+                    <figcaption>JPEG 4:4:4</figcaption>
+                    <canvas id="pictureCompareJpeg" width="240" height="240" aria-label="Actual JPEG 4:4:4 decoded preview"></canvas>
+                    <small id="pictureJpegBytes">—</small>
+                  </figure>
+                </div>
+                <p id="pictureCompareSavings" class="hint"></p>
+                <p id="pictureCompareStatus" class="hint" role="status">These previews decode the actual bytes prepared for the badge. Device-rendered JPEG stills remain untested.</p>
+              </section>
               <p class="lead" id="imageMeta">No image selected.</p>
               <div id="pictureSizePreview" class="picture-size-preview" hidden>
                 <h3>Picture size &amp; storage</h3>

@@ -1,6 +1,7 @@
 import { SuperBandBle } from './ble.js';
 import { inspectRu50, looksLikeBg02 } from './ru50.js';
 import { inspectBg02MjpegAvi } from './video-avi.js';
+import { validateBg02Jpeg } from './picture-comparison.js';
 import {
   Module,
   FileCmd,
@@ -779,6 +780,24 @@ class BadgeSession {
     }
   }
 
+  /**
+   * Experimental BG02 still JPEG. The default RU50 path is deliberately
+   * unchanged. JPEG is allowed ONLY for the exact verified board identity,
+   * when 0x20/2 reports algorithm 4 (Dial31 type 2).
+   */
+  async transferBg02Jpeg(bytes, { onProgress = null } = {}) {
+    if (this.protocolMode !== 'fitpro' || !this.isKnownBg02V15) {
+      throw new Error('Experimental JPEG requires the verified BG02 V1.5');
+    }
+    if (this.dialInfo?.algorithm !== 4 ||
+        chooseFitProDialType(this.dialInfo, false) !== 2) {
+      throw new Error('BG02 must report JPEG algorithm 4 before JPEG upload');
+    }
+    validateBg02Jpeg(bytes);
+    this._log('Experimental BG02 still JPEG: Dial31 type 2, baseline 240x240 4:4:4', 'warn');
+    return this.transferDialFile(bytes, { onProgress });
+  }
+
   /** Experimental AVI path uses the confirmed Android FitPro dial type 1.
    * Keep separate from transferFile/Photo to preserve picture behavior.
    */
@@ -1052,6 +1071,10 @@ export class SuperBandClient extends EventTarget {
 
   async transferVideoAvi(bytes, opts) {
     return this._requireActive().transferVideoAvi(bytes, opts);
+  }
+
+  async transferBg02Jpeg(bytes, opts) {
+    return this._requireActive().transferBg02Jpeg(bytes, opts);
   }
 
   /** True if any connected session is mid-transfer. */

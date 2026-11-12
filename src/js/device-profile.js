@@ -7,6 +7,7 @@
  * Unknown badges retain the upstream RGB565 / 360x360 fallback.
  */
 import { looksLikeBg02 } from './ru50.js';
+import { isKnownBg02V15Identity } from './fitpro.js';
 
 export const FALLBACK_SIZE = { width: 360, height: 360 };
 const validDimension = (v) => Number.isInteger(Number(v)) && Number(v) >= 16 &&
@@ -28,6 +29,10 @@ export function resolveBadgeProfile(snapshot = {}) {
     width,
     height,
     format,
+    jpegExperimentSupported: bg02 &&
+      protocolMode === 'fitpro' &&
+      Number(snapshot?.dialAlgorithm) === 4 &&
+      isKnownBg02V15Identity(snapshot?.name, snapshot?.hardware),
     fixedSize: bg02,
     hasReportedSize: reportedWidth !== null && reportedHeight !== null,
     showMediaLibrary: protocolMode === 'baji',
@@ -51,10 +56,13 @@ export function resolveBadgeProfile(snapshot = {}) {
  */
 export function imageMatchesBadge(prepared, profile, snapshot = {}) {
   if (!prepared) return false;
-  if (prepared.format !== profile.format) return false;
   if (profile.bg02) {
-    return snapshot.protocolMode === 'fitpro' &&
-      prepared.width === 240 && prepared.height === 240;
+    if (snapshot.protocolMode !== 'fitpro' ||
+        prepared.width !== 240 || prepared.height !== 240) return false;
+    if (prepared.format === 'ru50') return true;
+    // New opt-in JPEG format never inherits broad fallback compatibility.
+    // It requires exact V1.5 board identity and reported algorithm 4.
+    return prepared.format === 'jpeg444' && profile.jpegExperimentSupported;
   }
-  return true;
+  return prepared.format === profile.format;
 }

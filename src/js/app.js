@@ -8,6 +8,7 @@ import { bindAdvanced } from './advanced.js';
 import { bindVideo } from './video-ui.js';
 import { bindBg02Library } from './bg02-library-ui.js';
 import { estimatePictureStorage } from './picture-size.js';
+import { prepareBg02PictureComparison } from './picture-comparison.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -19,12 +20,20 @@ let activeProfileKey = null;
 let previewGeneration = 0;
 let videoController = null;
 let libraryController = null;
+let pictureComparison = null;
+let pictureComparisonGeneration = 0;
+let pictureComparing = false;
 const cropper = new CircleCropEditor({
   canvas: $('#cropCanvas'),
   zoomInput: $('#cropZoom'),
   resetButton: $('#cropReset'),
   onChange: ({zoom}) => {
     $('#cropZoomValue').textContent = zoom + '%';
+    // A JPEG/RU50 comparison must always represent the EXACT current crop.
+    // Framing adjustments invalidate encoded bytes; no stale uploads.
+    if (pictureComparison || pictureComparing || prepared?.source === 'comparison') {
+      invalidatePictureComparison('Crop changed. Reconvert to compare the current framing.');
+    }
     renderPictureSize();
   },
 });
@@ -60,6 +69,149 @@ function setUploadStatus(message, state = '') {
  * RU50 is fixed-size (29,904 B) regardless of original picture or crop;
  * the UI never claims an exact physical flash block size.
  */
+
+function pictureCodec() {
+  return $('#pictureCodec').value === 'jpeg444' ? 'jpeg444' : 'ru50';
+}
+
+function pictureCodecEligible(snapshot = client.getSnapshot()) {
+  return resolveBadgeProfile(snapshot).bg02 &&
+    (prepared?.source === 'crop' || prepared?.source === 'comparison');
+}
+
+function updatePictureCodecControls(snapshot = client.getSnapshot()) {
+  const enabled = pictureCodecEligible(snapshot);
+  $('#pictureCodecControls').hidden = !enabled;
+  $('#pictureJpegQualityWrap').hidden = pictureCodec() !== 'jpeg444';
+  $('#pictureJpegQualityLabel').textContent = $('#pictureJpegQuality').value;
+  $('#pictureCompareBuild').disabled = !enabled || pictureComparing ||
+    transferring || client.anyTransferring;
+  $('#pictureCodec').disabled = pictureComparing || transferring ||
+    client.anyTransferring;
+  $('#pictureJpegQuality').disabled = pictureComparing || transferring ||
+    client.anyTransferring;
+  $('#pictureRu50Pane').dataset.selected = String(pictureCodec() === 'ru50');
+  $('#pictureJpegPane').dataset.selected = String(pictureCodec() === 'jpeg444');
+}
+
+function invalidatePictureComparison(reason = 'Picture options changed. Compare again before uploading.') {
+  pictureComparisonGeneration++;
+  pictureComparison = null;
+  $('#pictureComparison').hidden = true;
+  $('#pictureComparePrompt').textContent = reason;
+  if (prepared?.source === 'comparison') {
+    prepared = { ...prepared, source: 'crop', bytes: null, format: 'ru50' };
+  }
+  // Keep the original photo and crop. No badge operation is performed.
+  updatePictureCodecControls();
+  renderPictureSize();
+  updatePushChecklist();
+}
+
+function selectPictureCodec() {
+  updatePictureCodecControls();
+  if (pictureComparison && prepared?.source === 'comparison') {
+    const selected = pictureCodec() === 'jpeg444'
+      ? pictureComparison.jpeg : pictureComparison.ru50;
+    prepared = { ...prepared, format: selected.format, bytes: selected.bytes };
+    $('#pictureComparePrompt').textContent =
+      'Selected ' + (selected.format === 'jpeg444' ? 'experimental JPEG' : 'RU50') +
+      ' · ' + formatBytes(selected.bytes.length) + ' prepared for upload.';
+    setUploadStatus(selected.format === 'jpeg444'
+      ? 'Experimental JPEG selected. Verify the A/B preview and confirm before transfer.'
+      : 'RU50 selected. The previewed bytes are ready to upload.', 'ok');
+  }
+  renderPictureSize();
+  updatePushChecklist();
+}
+
+/** Render 240px pixels in the exact output crop orientation. */
+function drawPicturePixels(canvas, pixels) {
+  canvas.getContext('2d').putImageData(
+    new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height),
+    0, 0,
+  );
+}
+
+async function comparePicture() {
+  if (!pictureCodecEligible() || pictureComparing ||
+      transferring || client.anyTransferring) return;
+  const file = $('#imageInput').files?.[0];
+  const before = client.getSnapshot();
+  invalidatePictureComparison('Encoding the latest crop…');
+  const request = ++pictureComparisonGeneration;
+  const jpegQuality = Number($('#pictureJpegQuality').value);
+  pictureComparing = true;
+  $('#pictureComparePrompt').textContent =
+    'Encoding RU50 and JPEG at the current crop…';
+  updatePictureCodecControls();
+  try {
+    const sourcePixels = cropper.getImageData(240);
+    const result = await prepareBg02PictureComparison(sourcePixels, {
+      jpegQuality,
+    });
+    if (request !== pictureComparisonGeneration ||
+        file !== $('#imageInput').files?.[0] ||
+        before.sessionId !== client.getSnapshot().sessionId) return;
+    // Decode the EXACT byte stream returned by the JPEG encoder rather than
+    // previewing a second uncompressed canvas. A failed decode cannot upload.
+    const bitmap = await createImageBitmap(
+      new Blob([result.jpeg.bytes], { type: 'image/jpeg' }),
+    );
+    if (request !== pictureComparisonGeneration ||
+        file !== $('#imageInput').files?.[0] ||
+        before.sessionId !== client.getSnapshot().sessionId) {
+      bitmap.close();
+      return;
+    }
+    try {
+      if (bitmap.width !== 240 || bitmap.height !== 240)
+        throw new Error('Encoded JPEG did not decode at 240×240');
+      drawPicturePixels($('#pictureCompareSource'), result.sourcePixels);
+      drawPicturePixels($('#pictureCompareRu50'), result.ru50.pixels);
+      const ctx = $('#pictureCompareJpeg').getContext('2d');
+      ctx.clearRect(0, 0, 240, 240);
+      ctx.drawImage(bitmap, 0, 0);
+    } finally {
+      bitmap.close();
+    }
+    pictureComparison = result;
+    $('#pictureRu50Bytes').textContent =
+      formatBytes(result.ru50.bytes.length) + ' · ~' +
+      formatBytes(estimatePictureStorage({
+        bg02:true, format:'ru50', encodedBytes:result.ru50.bytes.length,
+      }).allocationHint) + ' allocation';
+    $('#pictureJpegBytes').textContent =
+      formatBytes(result.jpeg.bytes.length) + ' · ~' +
+      formatBytes(estimatePictureStorage({
+        bg02:true, format:'jpeg444', encodedBytes:result.jpeg.bytes.length,
+      }).allocationHint) + ' allocation';
+    const saving = 100 * (1 - result.jpeg.bytes.length / result.ru50.bytes.length);
+    $('#pictureCompareSavings').textContent =
+      'JPEG ' + (saving >= 0 ? 'saves ' + saving.toFixed(1) + '%'
+        : 'uses ' + (-saving).toFixed(1) + '% more') +
+      ' encoded bytes at quality ' + result.jpegQuality +
+      '. Compare the fine edges and text before choosing.';
+    $('#pictureComparison').hidden = false;
+    $('#pictureCompareStatus').textContent =
+      'Previews are decoded from the real encoded bytes. Browser fidelity is not proof of BG02 JPEG playback. No upload has occurred.';
+    // Mark the cache ready and default to whichever format user selected.
+    prepared = { ...prepared, source: 'comparison' };
+    selectPictureCodec();
+  } catch (e) {
+    if (request !== pictureComparisonGeneration) return;
+    pictureComparison = null;
+    $('#pictureComparison').hidden = true;
+    $('#pictureComparePrompt').textContent = 'Comparison failed: ' + e.message;
+    setUploadStatus('Picture comparison failed: ' + e.message, 'err');
+    log({ msg:'BG02 picture compare: ' + e.message, level:'warn' });
+  } finally {
+    pictureComparing = false;
+    updatePictureCodecControls();
+    updatePushChecklist();
+  }
+}
+
 function renderPictureSize(snapshot = client.getSnapshot()) {
   const box = $('#pictureSizePreview');
   const file = $('#imageInput').files?.[0];
@@ -69,9 +221,17 @@ function renderPictureSize(snapshot = client.getSnapshot()) {
     return;
   }
   box.hidden = false;
+  const selectedFormat = profile.bg02 && prepared.source !== 'encoded'
+    ? pictureCodec() : prepared.format;
+  const measuredBytes = profile.bg02 && prepared.source !== 'encoded'
+    ? (pictureComparison
+      ? (selectedFormat === 'jpeg444' ? pictureComparison.jpeg : pictureComparison.ru50).bytes.length
+      : null)
+    : prepared.bytes?.length ?? null;
   const estimated = estimatePictureStorage({
     bg02: profile.bg02,
-    encodedBytes: prepared.bytes?.length ?? null,
+    format: selectedFormat,
+    encodedBytes: measuredBytes,
     sourceBytes: file.size,
     availableBytes: snapshot?.freeStorage ?? null,
   });
@@ -81,8 +241,11 @@ function renderPictureSize(snapshot = client.getSnapshot()) {
   $('#pictureSourceSize').textContent = formatBytes(file.size) + dims;
   $('#pictureEncodedSize').textContent = estimated
     ? formatBytes(estimated.encodedBytes) +
-      (profile.bg02 ? ' · RU50/ETC2 240×240 (exact)' : ' · encoded')
-    : 'Waiting for encoding';
+      (profile.bg02
+        ? (selectedFormat === 'jpeg444' ? ' · JPEG 4:4:4 (measured)' :
+          ' · RU50/ETC2 240×240 (fixed)')
+        : ' · encoded')
+    : 'Not encoded — select Convert & compare';
   $('#pictureAllocation').textContent = estimated?.allocationHint != null
     ? '~' + formatBytes(estimated.allocationHint) + ' (8 KiB-rounded estimate)'
     : 'Not established for this model';
@@ -93,15 +256,18 @@ function renderPictureSize(snapshot = client.getSnapshot()) {
     : 'Not reported';
   if (estimated?.fits === false) free.classList.add('picture-too-large');
   $('#pictureSpaceHint').textContent = profile.bg02
-    ? estimated?.fits === false
-      ? 'Estimated image allocation exceeds the last reported free space. ' +
-        'The picture will not fit without first freeing storage on the badge.'
-      : estimated?.freeAfterHint != null
-        ? 'Estimated free after upload: ~' +
-          formatBytes(estimated.freeAfterHint) +
-          '. The 8 KiB allocation rounding is empirical, not proven flash geometry.'
-        : 'The output is fixed-size RU50; connect BG02 to compare with its free storage. ' +
-          '8 KiB allocation rounding is only an estimate.'
+    ? selectedFormat === 'jpeg444' && !pictureComparison
+      ? 'Experimental JPEG needs a current Convert & compare result; ' +
+        'file size cannot be estimated before encoding.'
+      : estimated?.fits === false
+        ? 'Estimated image allocation exceeds the last reported free space. ' +
+          'Please free storage before uploading.'
+        : estimated?.freeAfterHint != null
+          ? 'Estimated free after upload: ~' +
+            formatBytes(estimated.freeAfterHint) +
+            '. The 8 KiB allocation rounding is empirical, not proven flash geometry.'
+          : 'Connect BG02 to compare your encoded size with the reported free space. ' +
+            'Allocation rounding is only an estimate.'
     : 'Estimated storage allocation is available only for BG02; ' +
       'the selected image has not changed.';
 }
@@ -260,6 +426,8 @@ function applyBadgeProfile(snapshot = client.getSnapshot()) {
   $('#dialWidthOption').title = profile.fixedSize ? 'Fixed for the BG02 display' : '';
   $('#dialHeightOption').title = profile.fixedSize ? 'Fixed for the BG02 display' : '';
   $('#imageInput').accept = profile.fileAccept;
+  if (changed && !profile.bg02)
+    invalidatePictureComparison('BG02 comparison unavailable on this device.');
   $('#btnPickImage').textContent = profile.chooseLabel;
   $('#imageFormatHelp').textContent = profile.formatLabel;
   $('#imageInputHint').textContent = profile.formatHelp;
@@ -358,8 +526,12 @@ function renderSnapshot(snap) {
 
 function updatePushChecklist() {
   const connected = client.connected;
-  const imageReady = !!prepared;
-  const idle = !transferring && !client.anyTransferring;
+  const profile = resolveBadgeProfile(client.getSnapshot());
+  // For source photos on BG02 the exact bytes must already be previewed.
+  // This prevents uploading a stale crop or silently bypassing JPEG quality.
+  const imageReady = !!prepared &&
+    !(profile.bg02 && prepared.source === 'crop');
+  const idle = !transferring && !pictureComparing && !client.anyTransferring;
   const storageProbe = client.getSnapshot()?.storageProbeSupported;
   $('#btnRefreshStorage').disabled = !connected || !idle || !storageProbe;
   const map = { conn: connected, image: imageReady, idle };
@@ -368,7 +540,6 @@ function updatePushChecklist() {
     if (!li) continue;
     li.dataset.ok = ok ? '1' : '0';
   }
-  const profile = resolveBadgeProfile(client.getSnapshot());
   const compatible = imageMatchesBadge(prepared, profile, client.getSnapshot());
   const canPush = connected && imageReady && compatible && idle;
   $('#btnPush').disabled = !canPush;
@@ -381,6 +552,7 @@ function updatePushChecklist() {
   $('#cropZoom').disabled = !idle;
   $('#cropReset').disabled = !idle;
   $('#cropCanvas').style.pointerEvents = idle ? 'auto' : 'none';
+  updatePictureCodecControls();
 }
 
 function renderMediaList(items) {
@@ -453,7 +625,10 @@ async function connect(acceptAll) {
 async function rebuildPreview() {
   const token = ++previewGeneration;
   const file = $('#imageInput').files?.[0];
+  // Every new photo/device starts with our already-working RU50 default.
+  $('#pictureCodec').value = 'ru50';
   prepared = null;
+  invalidatePictureComparison('Choose a crop, then compare RU50 with JPEG.');
   updatePushChecklist();
   hideCropper();
   setUploadStatus(file ? 'Preparing picture preview…' : 'Choose a picture to get started.');
@@ -516,10 +691,13 @@ async function rebuildPreview() {
        resolveBadgeProfile(now).format !== next.format) return;
 
     prepared = next;
+    updatePictureCodecControls(now);
     renderPictureSize(now);
-    setUploadStatus(profile.bg02
-      ? 'Picture ready. Adjust the crop if needed, then select Upload picture.'
-      : 'Picture ready. Select Upload to badge.', 'ok');
+    setUploadStatus(profile.bg02 && next.source === 'crop'
+      ? 'Adjust framing, then Convert & compare before uploading.'
+      : profile.bg02
+        ? 'Encoded RU50 selected. You can upload the existing file.'
+        : 'Picture ready. Select Upload to badge.', 'ok');
     if (isRu50) {
       $('#dialPreview').hidden = true;
       $('#dialPlaceholder').hidden = false;
@@ -528,7 +706,7 @@ async function rebuildPreview() {
         `${file.name} → 240×240 RU50/ETC2 · ${formatBytes(next.bytes.length)}`;
     } else if (profile.bg02) {
       $('#imageMeta').textContent =
-        `${file.name} → round 240×240 crop · converted automatically when uploaded`;
+        `${file.name} → round 240×240 crop · compare ETC2 and JPEG before upload`;
     } else {
       $('#dialPreview').src = next.previewUrl;
       $('#dialPreview').hidden = false;
@@ -564,17 +742,38 @@ async function pushImage() {
     setUploadStatus('Choose a picture first.', 'err');
     return;
   }
+  const activeSnapshot = client.getSnapshot();
+  const activeProfile = resolveBadgeProfile(activeSnapshot);
+  if (activeProfile.bg02 && prepared.source === 'crop') {
+    setUploadStatus('Convert & compare the crop before uploading.', 'err');
+    return;
+  }
+  if (activeProfile.bg02 && prepared.source === 'comparison' &&
+      (!pictureComparison || !pictureComparison[pictureCodec() === 'jpeg444' ? 'jpeg' : 'ru50'] ||
+       prepared.format !== pictureCodec())) {
+    setUploadStatus('Comparison no longer matches the selected format. Convert again.', 'err');
+    return;
+  }
   if (prepared.format === 'ru50') {
-    const snap = client.getSnapshot();
-    if (snap.protocolMode !== 'fitpro' || !looksLikeBg02(snap)) {
+    if (activeSnapshot.protocolMode !== 'fitpro' || !looksLikeBg02(activeSnapshot)) {
       toast('RU50 requires a confirmed BG02/LJ733 FitPro badge', 'err');
       setUploadStatus('This picture format does not match the connected badge.', 'err');
       return;
     }
     log({ msg: 'BG02 RU50/ETC2 image transfer', level: 'info' });
   }
-  const activeSnapshot = client.getSnapshot();
-  if (!imageMatchesBadge(prepared, resolveBadgeProfile(activeSnapshot), activeSnapshot)) {
+  if (activeProfile.bg02 && prepared.format === 'jpeg444') {
+    if (!activeProfile.jpegExperimentSupported) {
+      setUploadStatus('JPEG upload requires BG02 V1.5 with algorithm 4 reported.', 'err');
+      return;
+    }
+    if (!window.confirm(
+      'EXPERIMENTAL: upload the reviewed 240×240 JPEG 4:4:4 using Dial31 type 2? ' +
+      'A successful BLE ACK will not prove it displays or is stored correctly. ' +
+      'The current badge picture may change. Continue?'
+    )) return;
+  }
+  if (!imageMatchesBadge(prepared, activeProfile, activeSnapshot)) {
     toast('Image format does not match this badge. Select a compatible image.', 'err');
     setUploadStatus('This picture belongs to a different badge. Choose it again.', 'err');
     return;
@@ -589,9 +788,31 @@ async function pushImage() {
   updatePushChecklist();
   try {
     let uploadBytes = prepared.bytes;
+    if (activeProfile.bg02 && prepared.format === 'jpeg444') {
+      const storage = await client.refreshFitProStorage({ timeoutMs: 5000 });
+      const after = client.getSnapshot();
+      if (after.sessionId !== activeSnapshot.sessionId ||
+          !resolveBadgeProfile(after).jpegExperimentSupported) {
+        throw new Error('Badge identity or JPEG capability changed during preflight');
+      }
+      const estimate = estimatePictureStorage({
+        bg02: true, format: 'jpeg444',
+        encodedBytes: uploadBytes.length,
+        availableBytes: storage.reportedBytes,
+      });
+      if (estimate?.fits === false) {
+        throw new Error('Experimental JPEG needs ~' +
+          formatBytes(estimate.allocationHint) +
+          ' but only ~' + formatBytes(storage.reportedBytes) +
+          ' is reported free. No bytes were uploaded.');
+      }
+    }
     if (prepared.source === 'crop') {
       log({ msg: 'Cropping and converting the picture for BG02…', level:'info' });
       setUploadStatus('Converting your picture for BG02…', 'busy');
+      if (activeProfile.bg02) {
+        throw new Error('BG02 source pictures must be compared before uploading');
+      }
       uploadBytes = await encodeImageDataRu50(cropper.getImageData(240));
       const snapshot = client.getSnapshot();
       if (!client.connected || snapshot.sessionId !== activeSnapshot.sessionId ||
@@ -602,21 +823,28 @@ async function pushImage() {
       log({ msg: `Image encoded: ${formatBytes(uploadBytes.length)} RU50/ETC2`, level:'ok' });
     }
     const functionType = Number($('#functionType').value) || FunctionType.BACKGROUND;
-    const result = await client.transferFile(uploadBytes, {
-      fileType: FileType.IMAGE,
-      functionType,
-      allocateId: $('#allocMedia').checked,
-      onProgress: (pct) => {
-        const percent = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
-        bar.style.width = `${percent}%`;
-        wrap.setAttribute('aria-valuenow', String(percent));
-        setUploadStatus(`Sending picture… ${percent}%`, 'busy');
-      },
-    });
+    const onProgress = (pct) => {
+      const percent = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+      bar.style.width = `${percent}%`;
+      wrap.setAttribute('aria-valuenow', String(percent));
+      setUploadStatus(`Sending picture… ${percent}%`, 'busy');
+    };
+    // Dedicated JPEG method validates the exact identity, algorithm=4 and
+    // 240x240 baseline 4:4:4 before any Bluetooth write.
+    const result = activeProfile.bg02 && prepared.format === 'jpeg444'
+      ? await client.transferBg02Jpeg(uploadBytes, { onProgress })
+      : await client.transferFile(uploadBytes, {
+          fileType: FileType.IMAGE,
+          functionType,
+          allocateId: $('#allocMedia').checked,
+          onProgress,
+        });
     const via = result.path === 'fitpro-dial31' ? 'dial31' : 'baji';
-    setUploadStatus(result.verified === false
-      ? 'Transfer finished, but verification is unclear. Check the badge screen.'
-      : 'Transfer acknowledged. Check the picture on the badge screen.', 'ok');
+    setUploadStatus(activeProfile.bg02 && prepared.format === 'jpeg444'
+      ? 'JPEG transfer acknowledged. Confirm that the badge displays and retains it correctly.'
+      : result.verified === false
+        ? 'Transfer finished, but verification is unclear. Check the badge screen.'
+        : 'Transfer acknowledged. Check the picture on the badge screen.', 'ok');
     toast(
       result.verified === false
         ? 'Uploaded (verify unclear)'
@@ -657,8 +885,9 @@ async function pushAll() {
     toast('Choose an image first', 'err');
     return;
   }
-  if (prepared.format === 'ru50') {
-    toast('Experimental RU50 is limited to one verified BG02 at a time', 'err');
+  if (prepared.format === 'ru50' || 
+      (prepared.format === 'jpeg444' && resolveBadgeProfile(client.getSnapshot()).bg02)) {
+    toast('Experimental BG02 image formats are limited to one verified badge at a time', 'err');
     return;
   }
   const bar = $('#pushBar');
@@ -773,6 +1002,12 @@ function bind() {
   $('#btnPair').addEventListener('click', () =>
     client.pair().catch((e) => toast(e.message, 'err')),
   );
+  $('#pictureCodec').addEventListener('change', selectPictureCodec);
+  $('#pictureJpegQuality').addEventListener('input', () => {
+    $('#pictureJpegQualityLabel').textContent = $('#pictureJpegQuality').value;
+    invalidatePictureComparison('JPEG quality changed. Reconvert to preview new bytes.');
+  });
+  $('#pictureCompareBuild').addEventListener('click', () => void comparePicture());
   $('#btnPickImage').addEventListener('click', () => $('#imageInput').click());
   $('#imageInput').addEventListener('change', () => rebuildPreview());
   $('#dialW').addEventListener('change', () => rebuildPreview());
