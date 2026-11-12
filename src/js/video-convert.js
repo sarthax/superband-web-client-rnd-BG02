@@ -6,6 +6,7 @@
  * No MP4/WebM decoder is bundled. Unsupported formats fail with a clear error.
  */
 import { BG02_VIDEO, muxBg02MjpegAvi, inspectBg02MjpegAvi, extractBg02AviFrame } from './video-avi.js';
+import { planTrimmedVideo, planGifStoryboard } from './video-timeline.js';
 
 export const VIDEO_QUALITIES = Object.freeze({
   low: { label: 'Low', jpegQuality: 0.30 },
@@ -164,6 +165,24 @@ function gifSampler(source) {
   };
 }
 
+/** Decode a single original GIF frame as a thumbnail for manual selection. */
+export async function gifFrameThumbnail(source, index) {
+  if (source?.kind !== 'gif' || !Number.isInteger(index) ||
+      index < 0 || index >= source.ends.length) {
+    throw new Error('Unknown GIF frame');
+  }
+  const { image } = await source.decoder.decode({ frameIndex: index });
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 112; canvas.height = 112;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    coverOrContain(ctx, image, source.width, source.height, 'contain');
+    return canvas.toDataURL('image/jpeg', 0.65);
+  } finally {
+    image.close();
+  }
+}
+
 async function seekVideo(source, seconds, signal) {
   abortIf(signal);
   const video = source.video;
@@ -213,7 +232,9 @@ export async function convertVideoToBg02Avi(source, {
   start = 0,
   end = source.durationSeconds,
   seconds = 5,
-  loop = source.kind === 'gif',
+  loop = false,
+  frameIndices = null,
+  holdFrames = 1,
   fit = 'cover',
   quality = 'medium',
   onProgress = () => {},
@@ -228,17 +249,20 @@ export async function convertVideoToBg02Avi(source, {
       begin < 0 || stop <= begin || stop > source.durationSeconds + 0.01) {
     throw new Error('The start/stop trim markers must select part of the source');
   }
-  if (!Number.isFinite(duration) || duration < 1 ||
-      duration > BG02_VIDEO.MAX_EXPERIMENTAL_SECONDS) {
-    throw new Error('Choose a clip between 1 and 30 seconds');
+  const storyboard = frameIndices !== null;
+  if (storyboard && source.kind !== 'gif') {
+    throw new Error('Frame picker is available for animated GIF input only');
   }
-  if (!loop && duration > stop - begin + 0.02) {
-    throw new Error('Selected range is too short. Enable Loop selection or shorten output');
-  }
+  const plan = storyboard
+    ? planGifStoryboard({
+      frameIndices, sourceFrameCount: source.ends.length,
+      holdFrames, maxSeconds: duration, loop,
+    })
+    : planTrimmedVideo({ start: begin, end: stop, maxSeconds: duration, loop });
   const opts = VIDEO_QUALITIES[quality];
   if (!opts) throw new Error('Unknown video quality preset');
   if (fit !== 'cover' && fit !== 'contain') throw new Error('Unknown picture fit');
-  const total = Math.max(1, Math.round(duration * BG02_VIDEO.FPS));
+  const total = plan.frameCount;
   const canvas = document.createElement('canvas');
   canvas.width = BG02_VIDEO.WIDTH; canvas.height = BG02_VIDEO.HEIGHT;
   const ctx = canvas.getContext('2d', { alpha: false });
@@ -249,13 +273,14 @@ export async function convertVideoToBg02Avi(source, {
   let thumbnail = null;
   for (let i = 0; i < total; i++) {
     abortIf(signal);
-    const t = i / BG02_VIDEO.FPS;
-    const span = stop - begin;
-    const at = begin + (loop ? t % span : Math.min(t, span - 0.001));
     let picture;
-    if (source.kind === 'gif') picture = await renderGif(at);
-    else {
-      await seekVideo(source, at, signal);
+    if (storyboard) {
+      const { image } = await source.decoder.decode({ frameIndex: plan.frameIndexes[i] });
+      picture = image;
+    } else if (source.kind === 'gif') {
+      picture = await renderGif(plan.sourceTimes[i]);
+    } else {
+      await seekVideo(source, plan.sourceTimes[i], signal);
       picture = source.video;
     }
     try {
@@ -272,5 +297,5 @@ export async function convertVideoToBg02Avi(source, {
   abortIf(signal);
   const bytes = muxBg02MjpegAvi(frameBytes);
   const info = inspectBg02MjpegAvi(bytes);
-  return { bytes, info, thumbnail, quality, loop, sourceName: source.name };
+  return { bytes, info, thumbnail, quality, loop, plan, sourceName: source.name };
 }
