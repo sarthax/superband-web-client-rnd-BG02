@@ -2,6 +2,12 @@
 
 Static analysis of vendor OTA packages for the electronic badge line (`DG01`, `BJ-1`, product family **LJ733**). Artifacts were downloaded via the tomato catalog (see [Firmware OTA](ota-firmware.md)) and unpacked with [jl-misctools](https://github.com/kagaimiq/jl-misctools) `fwunpack_newfw.py`.
 
+## Four-image cross-version comparison (November 11, 2026)
+
+A [corrected, offline hash and application-anchor comparison](../LJ733-COMPONENT-COMPARISON-2026-11-11.md) verified that DG01, BJ-1, HYX and older LJ733 images share byte-identical boot and configuration members but differ in the application, UI style and sound assets. DG01 and BJ-1 share 96.81% of distinct extracted printable strings, **not** 96.81% executable code; about 11% of sampled high-information 1 KiB blocks exactly match after arbitrary offset shifts. The owner's BG02 V35922 image was **not available**, and cross-flashing remains unsupported.
+
+An independent [BG02-family Python protocol port](https://github.com/arqueomendez/ebadge) documents V35509 on LJ733_MB_V1.1, with FitPro RU50 uploads but **no OTA or sharing/readback**. A fresh official catalog lookup of V35509 returned **no upgrade offer**. See [OTA catalog audit](../BG02-OTA-CATALOG-AUDIT-2026-11-11.md).
+
 ## Verdict
 
 | Item | Finding |
