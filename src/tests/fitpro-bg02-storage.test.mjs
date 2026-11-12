@@ -5,6 +5,7 @@ import {
   parseFitProStorageResponse,
   isFitProStoragePacket,
   parseDialInfo,
+  chooseFitProDialType,
 } from '../js/fitpro.js';
 import { parsePacket } from '../js/protocol.js';
 
@@ -54,4 +55,11 @@ test('BG02 dial-info fixture identifies LJ733 and K66 without guessing', () => {
   assert.equal(info.mainModel, 'LJ733');
   assert.equal(info.algorithm, 4);
   assert.equal(info.shortPkgLength, 5000);
+});
+
+test('reading JPEG capability must not change BG02 RU50 upload dial type', () => {
+  const jpegInfo = { algorithm: 4, dialType: 2 };
+  assert.equal(chooseFitProDialType(jpegInfo, true), 0);
+  assert.equal(chooseFitProDialType(jpegInfo, false), 2);
+  assert.equal(chooseFitProDialType(null, false), 0);
 });
