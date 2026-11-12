@@ -257,6 +257,14 @@
                       <option value="30">30 seconds — experimental</option>
                     </select>
                   </label>
+                  <label class="field">AVI frame rate
+                    <select id="videoFps">
+                      <option value="3" selected>3 fps — SuperBand reference</option>
+                      <option value="2">2 fps — experimental</option>
+                      <option value="1">1 fps — experimental</option>
+                      <option value="0.5">0.5 fps — experimental</option>
+                    </select>
+                  </label>
                   <label class="field">Encoding
                     <select id="videoQuality">
                       <option value="low">Low — smaller</option>
@@ -273,6 +281,7 @@
                 </div>
                 <label class="check"><input id="videoLoop" type="checkbox" /> Repeat selected segment to fill the maximum length (off by default)</label>
                 <p id="videoRangeInfo" class="hint">The maximum duration never pads a shorter clip unless Repeat is enabled.</p>
+                <p id="videoFpsInfo" class="hint">3 fps is the captured SuperBand format. Lower fps might play at the wrong speed or not play.</p>
               </div>
               <div id="gifFramePicker" class="gif-frame-picker" hidden>
                 <h3>GIF frame picker</h3>
@@ -282,12 +291,12 @@
                   <button type="button" id="gifPrev" disabled>Previous 24</button>
                   <span id="gifPage" class="muted">—</span>
                   <button type="button" id="gifNext" disabled>Next 24</button>
-                  <label class="field">Show each picked frame for
+                  <label class="field">Hold each chosen frame
                     <select id="gifHold" disabled>
-                      <option value="1" selected>0.33 seconds</option>
-                      <option value="2">0.67 seconds</option>
-                      <option value="3">1 second</option>
-                      <option value="6">2 seconds</option>
+                      <option value="1" selected>1 AVI frame (0.33 seconds)</option>
+                      <option value="2">2 AVI frames (0.67 seconds)</option>
+                      <option value="3">3 AVI frames (1 second)</option>
+                      <option value="6">6 AVI frames (2 seconds)</option>
                     </select>
                   </label>
                   <button type="button" id="gifClear">Clear selected</button>
