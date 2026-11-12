@@ -589,6 +589,7 @@ export function bindVideo({ client, log, toast, $ }) {
   els.gifClear.addEventListener('click', () => {
     if (!source || source.kind !== 'gif' || working || uploading) return;
     selectedGifFrames.clear();
+    els.gifUseFrames.checked = false;
     cropEditor.onSelectionChanged();
     els.gifFrameGrid.querySelectorAll('.gif-frame-card').forEach(
       (button) => button.setAttribute('aria-pressed', 'false'),
