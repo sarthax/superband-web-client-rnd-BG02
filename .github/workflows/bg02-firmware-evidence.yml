@@ -1,0 +1,103 @@
+name: BG02 firmware evidence (research only)
+
+on:
+  push:
+    branches:
+      - research/bg02-peer-share-readback
+    paths:
+      - '.github/workflows/bg02-firmware-evidence.yml'
+      - 'tools/bg02_firmware_evidence.py'
+      - 'tools/tests/test_bg02_firmware_evidence.py'
+      - 'research/firmware/lj733_V27550.zip'
+      - 'research/firmware/lj733b_V34574.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Six offline ZIP and text-anchor unit tests
+        run: python3 -m unittest discover -s tools/tests -p 'test_bg02_firmware_evidence.py' -v
+
+      - name: Scan two committed LJ733 firmware packages
+        run: |
+          python3 tools/bg02_firmware_evidence.py \
+            research/firmware/lj733_V27550.zip \
+            research/firmware/lj733b_V34574.zip \
+            --json-out /tmp/bg02-firmware-evidence.json
+
+      - name: Unpack UFWs to app.bin with published JieLi tools
+        run: |
+          python3 -m venv /tmp/bg02-evidence-venv
+          /tmp/bg02-evidence-venv/bin/pip install -q pyyaml crcmod
+          git clone -q --depth 1 https://github.com/kagaimiq/jl-misctools.git /tmp/jl-misctools
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          for name in ('lj733_V27550','lj733b_V34574'):
+              archive=Path('research/firmware') / (name + '.zip')
+              with ZipFile(archive) as z:
+                  entries=[m for m in z.namelist() if Path(m).name.lower()=='app.ufw']
+                  if len(entries)!=1:
+                      raise SystemExit(f'expected 1 app.ufw in {archive}, got {entries}')
+                  Path('/tmp/'+name+'.ufw').write_bytes(z.read(entries[0]))
+          PY
+          for name in lj733_V27550 lj733b_V34574; do
+            PYTHONPATH=/tmp/jl-misctools/firmware \
+              /tmp/bg02-evidence-venv/bin/python \
+              /tmp/jl-misctools/firmware/fwunpack_newfw.py \
+              "/tmp/${name}.ufw" --dirname "/tmp/${name}_unpack" >/tmp/${name}_unpack.log
+            test -s "/tmp/${name}_unpack/files/app.bin"
+            echo "UNPACK_OK ${name} app.bin bytes=$(wc -c <"/tmp/${name}_unpack/files/app.bin")"
+          done
+          python3 tools/bg02_firmware_evidence.py \
+            /tmp/lj733_V27550_unpack/files/app.bin \
+            /tmp/lj733b_V34574_unpack/files/app.bin \
+            --json-out /tmp/bg02-appbin-evidence.json
+
+      - name: Condensed unpacked app.bin evidence
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path('/tmp/bg02-appbin-evidence.json').read_text())
+          print('STATUS: UNPACKED_APP_BIN_TEXT_ANCHORS_ONLY')
+          print('STILL NOT A BG02 V35922 FIRMWARE REVIEW')
+          for source in data['sources']:
+              print('APP_BIN', source['input'])
+              for entry in source['entries']:
+                  print('  SHA256', entry['sha256'], 'BYTES', entry['bytes'])
+                  for family, hits in entry['hits'].items():
+                      for h in hits[:8]:
+                          print('  HIT', family, h['anchor'], hex(h['offset_in_member']), repr(h['excerpt'][:100]))
+                  if not entry['hits']:
+                      print('  NO_MATCHES: INCONCLUSIVE')
+          PY
+
+      - name: Condensed evidence summary (no firmware bytes)
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path("/tmp/bg02-firmware-evidence.json").read_text())
+          print("STATUS: OFFLINE_TEXT_ANCHORS_ONLY")
+          print("Not a BG02 V35922 firmware audit. No readback support verified.")
+          for source in data["sources"]:
+              print("SOURCE", source["input"])
+              for entry in source["entries"]:
+                  for family, hits in entry["hits"].items():
+                      print("  MEMBER", entry["member"], "FAMILY", family,
+                            "ANCHORS", ",".join(sorted({h["anchor"] for h in hits})))
+                  if not entry["hits"]:
+                      print("  MEMBER", entry["member"], "ANCHORS NONE (INCONCLUSIVE)")
+                  if entry["packed_container_warning"]:
+                      print("  WARNING: PACKED_UFW_NOT_UNPACKED")
+              for note in source["notes"]:
+                  print("  NOTE", note)
+          PY

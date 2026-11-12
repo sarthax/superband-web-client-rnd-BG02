@@ -1,0 +1,23 @@
+name: BG02 OTA catalog one-shot metadata audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/bg02-peer-share-readback]
+    paths:
+      - '.github/workflows/bg02-catalog-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Query nine evidence-backed firmware-version keys (including BG02 V35509) (metadata only)
+        run: python3 tools/bg02_catalog_audit.py

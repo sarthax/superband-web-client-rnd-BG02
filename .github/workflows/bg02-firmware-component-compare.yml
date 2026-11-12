@@ -1,0 +1,102 @@
+name: BG02 four-image firmware component comparison (read only)
+
+on:
+  push:
+    branches: [research/bg02-peer-share-readback]
+    paths:
+      - '.github/workflows/bg02-firmware-component-compare.yml'
+      - 'tools/bg02_compare_firmware.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare-four-known-images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Obtain known DG01 and BJ-1 vendor ZIPs (NOT BG02 compatible)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/bg02-comparison/zips /tmp/bg02-comparison/ufws /tmp/bg02-comparison/unpacked
+          curl -fsSL --retry 1 --connect-timeout 15 --max-time 75 \
+            --max-filesize 10000000 \
+            -o /tmp/bg02-comparison/zips/dg01.zip \
+            'https://cdn.jusonsmart.com/0ta/LJ733/V32399_A12172156_LJ733_V1.2_YJ435_DG01_SUPERBAND.zip'
+          printf '%s  %s\n' \
+            '9fc02aec53c6faaf60b86831dce5227c675d4b9fac74e0f14933022df4bd2ec4' \
+            '/tmp/bg02-comparison/zips/dg01.zip' | sha256sum -c -
+          curl -fsSL --retry 1 --connect-timeout 15 --max-time 75 \
+            --max-filesize 10000000 \
+            -o /tmp/bg02-comparison/zips/bj1.zip \
+            'https://cdn.jusonsmart.com/0ta/LJ733/V32286_A12091701_LJ733_V1.2_ZX400_BJ-1_SUPERBAND.zip'
+          echo "DG01_VENDOR_ARCHIVE_SHA256 $(sha256sum /tmp/bg02-comparison/zips/dg01.zip | cut -d' ' -f1)"
+          echo "BJ1_VENDOR_ARCHIVE_SHA256 $(sha256sum /tmp/bg02-comparison/zips/bj1.zip | cut -d' ' -f1)"
+
+      - name: Extract only app.ufw from four known ZIPs, size-bounded
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          labels = {
+              'DG01_V32399': Path('/tmp/bg02-comparison/zips/dg01.zip'),
+              'BJ1_V32286': Path('/tmp/bg02-comparison/zips/bj1.zip'),
+              'LJ733_V27550': Path('research/firmware/lj733_V27550.zip'),
+              'HYX_V34574': Path('research/firmware/lj733b_V34574.zip')
+          }
+          for label, archive in labels.items():
+              with ZipFile(archive) as z:
+                  matches = [entry for entry in z.infolist()
+                             if Path(entry.filename).name.lower() == 'app.ufw' and not entry.is_dir()]
+                  if len(matches) != 1:
+                      raise ValueError(f"{label}: expected one app.ufw, got {len(matches)}")
+                  entry = matches[0]
+                  if entry.file_size > 8000000 or entry.file_size < 100000:
+                      raise ValueError(f"{label}: unexpected app.ufw byte count")
+                  out = Path('/tmp/bg02-comparison/ufws') / (label + '.ufw')
+                  out.write_bytes(z.read(entry))
+                  print(f"EXTRACTED_UFW {label} size={entry.file_size}")
+          PY
+
+      - name: Unpack on runner (no hardware access)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv /tmp/bg02-component-venv
+          /tmp/bg02-component-venv/bin/pip -q install pyyaml crcmod
+          git clone --quiet --depth 1 https://github.com/kagaimiq/jl-misctools.git /tmp/bg02-component-jl
+          echo "JL_TOOLS_COMMIT $(git -C /tmp/bg02-component-jl rev-parse HEAD)"
+          for label in DG01_V32399 BJ1_V32286 LJ733_V27550 HYX_V34574; do
+            PYTHONPATH=/tmp/bg02-component-jl/firmware \
+              /tmp/bg02-component-venv/bin/python \
+              /tmp/bg02-component-jl/firmware/fwunpack_newfw.py \
+              "/tmp/bg02-comparison/ufws/$label.ufw" \
+              --dirname "/tmp/bg02-comparison/unpacked/$label" \
+              > "/tmp/bg02-comparison/$label.unpack.log"
+            test -s "/tmp/bg02-comparison/unpacked/$label/files/app.bin"
+            echo "UNPACK_OK $label app_bytes=$(wc -c <"/tmp/bg02-comparison/unpacked/$label/files/app.bin")"
+          done
+
+      - name: Component hashes, resource member inventory, 1KiB app overlap
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/bg02_compare_firmware.py \
+            --image DG01_V32399 /tmp/bg02-comparison/unpacked/DG01_V32399 \
+            --image BJ1_V32286 /tmp/bg02-comparison/unpacked/BJ1_V32286 \
+            --image LJ733_V27550 /tmp/bg02-comparison/unpacked/LJ733_V27550 \
+            --image HYX_V34574 /tmp/bg02-comparison/unpacked/HYX_V34574 \
+            --json-out /tmp/bg02-comparison/component-report.json
+
+      - name: Upload metadata-only comparison (no firmware binaries)
+        uses: actions/upload-artifact@v4
+        with:
+          name: bg02-firmware-component-metadata
+          path: /tmp/bg02-comparison/component-report.json
+          retention-days: 7

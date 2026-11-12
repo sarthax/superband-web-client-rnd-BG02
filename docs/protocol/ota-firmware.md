@@ -2,6 +2,10 @@
 
 How SuperBand checks for and applies badge firmware. Separate from the Baji media/file UART plane.
 
+## BG02 V35922 catalog recheck (November 11, 2026)
+
+A new **read-only, bounded eight-version official catalog audit** was completed on [GitHub Actions](https://github.com/sarthax/superband-web-client-rnd-BG02/actions/runs/43121296993). **V35922 returned no upgrade**, and no known older LJ733 catalog key returned a target matching **BG02 / LJ733_MB_V1.5 / V35922**. The known positive entries still point to DG01, BJ-1 and HYX/LJ733B firmware variants. We have **not** acquired V35922 or identified its actual predecessor. See [full decision record](../BG02-OTA-CATALOG-AUDIT-2026-11-11.md). Do not attempt to flash any of those other packages to the owner's badge.
+
 ## Summary
 
 | Item | Value |
