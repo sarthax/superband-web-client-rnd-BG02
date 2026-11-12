@@ -16,6 +16,8 @@ The user's recovered AVI from the SuperBand app contains:
 
 A separate video panel allows selecting browser-playable MP4, WebM, or animated GIF; preview; start and stop markers; 5, 10, 15, 20, or 30 second output; Low/Medium/High JPEG quality; square crop or black letterbox; and loop the selected source segment to fill the chosen duration. It converts locally to **240×240 / 3fps MJPEG AVI with no audio**.
 
+Existing compatible 240×240/3fps MJPEG AVI can also be imported and passed through **unchanged**, with a first-frame poster. This allows testing the BLE uploader using the exact recovered SuperBand AVI before testing the new browser encoder.
+
 After encoding, it shows the **exact AVI byte count**, first-frame preview, probable 8KiB-rounded allocation, and the badge's last reported free space. Users can download the AVI and independently inspect it. Upload uses a separate FitPro Dial31 type=1 sender and requires a fresh 0x20/4 free-space query. Existing picture uploading is untouched.
 
 Animated GIF decoding uses Chrome/Edge ImageDecoder (WebCodecs), which is not available in every browser. This app already requires a Web Bluetooth-capable Chromium browser. Unsupported input video codecs will fail with an explicit message. Chrome may not decode MJPEG AVI as source, even though the badge may accept that output.
