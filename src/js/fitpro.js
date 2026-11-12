@@ -221,6 +221,12 @@ export function buildDialFinish(fileBlob) {
   return buildFitProFrame(FitPro.DIAL_MODULE, FitPro.DialCmd.FINISH, sumBytes);
 }
 
+/** Keep RU50's existing dial type when a read-only dial-info probe reports JPEG. */
+export function chooseFitProDialType(info, isRu50 = false) {
+  if (isRu50) return 0;
+  return info?.dialType ?? (info?.algorithm === 4 ? 2 : 0);
+}
+
 /**
  * Parse ClockDialInfo payload (bluetooth/c.java C()).
  * @returns {object|null}
