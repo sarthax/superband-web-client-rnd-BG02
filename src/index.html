@@ -81,6 +81,9 @@
         <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="manager">
           Pictures
         </button>
+        <button type="button" class="tab" role="tab" aria-selected="false" data-tab="video">
+          Video &amp; GIF
+        </button>
         <button type="button" class="tab" role="tab" aria-selected="false" data-tab="advanced">
           Advanced
         </button>
@@ -150,6 +153,77 @@
             </div>
           </section>
 
+
+
+          <section class="section device-section">
+            <h2>Device details</h2>
+            <p class="lead">
+              The badge name, firmware and battery are summarized above. Technical details are optional.
+            </p>
+            <details class="device-details">
+              <summary>Show device information and re-pair controls</summary>
+              <div class="stack">
+              <div class="stats" id="deviceStats">
+                <div class="stat">
+                  <span class="k">Name</span><span class="v" data-field="name">—</span>
+                </div>
+                <div class="stat">
+                  <span class="k">Model</span><span class="v" data-field="model">—</span>
+                </div>
+                <div class="stat">
+                  <span class="k">Firmware</span><span class="v" data-field="firmware">—</span>
+                </div>
+                <div class="stat">
+                  <span class="k">Hardware</span><span class="v" data-field="hardware">—</span>
+                </div>
+                <div class="stat">
+                  <span class="k">Software</span><span class="v" data-field="software">—</span>
+                </div>
+                <div class="stat">
+                  <span class="k">Manufacturer</span
+                  ><span class="v" data-field="manufacturer">—</span>
+                </div>
+                <div class="stat">
+                  <span class="k">Battery</span><span class="v" data-field="battery">—</span>
+                </div>
+                <div class="stat">
+                  <span class="k">Protocol</span><span class="v" data-field="protocol">—</span>
+                </div>
+                <div class="stat">
+                  <span class="k">Free storage</span><span class="v" data-field="free">—</span>
+                </div>
+                <div class="stat">
+                  <span class="k">Capacity</span><span class="v" data-field="cap">—</span>
+                </div>
+              </div>
+              <div class="row">
+                <button data-need-conn disabled id="btnRefresh">Refresh info</button>
+                <button data-need-conn disabled id="btnRefreshStorage" title="Read-only BG02 0x20/4 query; does not delete files">Refresh storage</button>
+                <button data-need-conn disabled id="btnPair">Re-pair</button>
+              </div>
+              </div>
+            </details>
+          </section>
+
+          <section class="section" id="mediaLibrarySection" style="grid-column: 1 / -1" hidden>
+            <h2>Media library</h2>
+            <p class="lead">List and delete media IDs (Baji badges only).</p>
+            <div class="stack">
+              <div class="row">
+                <button data-need-conn disabled id="btnMediaList">Refresh list</button>
+                <button data-need-conn disabled id="btnAllocId">Allocate ID</button>
+                <span class="status-pill" id="mediaIdPill">Media ID —</span>
+              </div>
+              <div class="media-list" id="mediaList">
+                <div class="empty">Connect and refresh to load media.</div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div id="tab-video" class="tab-panel" role="tabpanel" hidden>
+        <div class="grid">
           <section class="section video-section" id="videoSection" hidden>
             <h2>Video &amp; animated GIF <small class="video-experiment-tag">Experimental</small></h2>
             <p class="lead">Trim a segment, choose encoding quality, then check the exact AVI size before upload. The badge is verified with a 5-second, 3 fps MJPEG video; longer playback has not been confirmed.</p>
@@ -216,71 +290,6 @@
               </div>
               <p id="videoStatus" class="hint" role="status" aria-live="polite">Conversion runs locally in your browser. The photo uploader is unchanged.</p>
               <div class="progress" id="videoProgress" role="progressbar" aria-label="Video conversion or upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i id="videoBar"></i></div>
-            </div>
-          </section>
-
-          <section class="section device-section">
-            <h2>Device details</h2>
-            <p class="lead">
-              The badge name, firmware and battery are summarized above. Technical details are optional.
-            </p>
-            <details class="device-details">
-              <summary>Show device information and re-pair controls</summary>
-              <div class="stack">
-              <div class="stats" id="deviceStats">
-                <div class="stat">
-                  <span class="k">Name</span><span class="v" data-field="name">—</span>
-                </div>
-                <div class="stat">
-                  <span class="k">Model</span><span class="v" data-field="model">—</span>
-                </div>
-                <div class="stat">
-                  <span class="k">Firmware</span><span class="v" data-field="firmware">—</span>
-                </div>
-                <div class="stat">
-                  <span class="k">Hardware</span><span class="v" data-field="hardware">—</span>
-                </div>
-                <div class="stat">
-                  <span class="k">Software</span><span class="v" data-field="software">—</span>
-                </div>
-                <div class="stat">
-                  <span class="k">Manufacturer</span
-                  ><span class="v" data-field="manufacturer">—</span>
-                </div>
-                <div class="stat">
-                  <span class="k">Battery</span><span class="v" data-field="battery">—</span>
-                </div>
-                <div class="stat">
-                  <span class="k">Protocol</span><span class="v" data-field="protocol">—</span>
-                </div>
-                <div class="stat">
-                  <span class="k">Free storage</span><span class="v" data-field="free">—</span>
-                </div>
-                <div class="stat">
-                  <span class="k">Capacity</span><span class="v" data-field="cap">—</span>
-                </div>
-              </div>
-              <div class="row">
-                <button data-need-conn disabled id="btnRefresh">Refresh info</button>
-                <button data-need-conn disabled id="btnRefreshStorage" title="Read-only BG02 0x20/4 query; does not delete files">Refresh storage</button>
-                <button data-need-conn disabled id="btnPair">Re-pair</button>
-              </div>
-              </div>
-            </details>
-          </section>
-
-          <section class="section" id="mediaLibrarySection" style="grid-column: 1 / -1" hidden>
-            <h2>Media library</h2>
-            <p class="lead">List and delete media IDs (Baji badges only).</p>
-            <div class="stack">
-              <div class="row">
-                <button data-need-conn disabled id="btnMediaList">Refresh list</button>
-                <button data-need-conn disabled id="btnAllocId">Allocate ID</button>
-                <span class="status-pill" id="mediaIdPill">Media ID —</span>
-              </div>
-              <div class="media-list" id="mediaList">
-                <div class="empty">Connect and refresh to load media.</div>
-              </div>
             </div>
           </section>
         </div>
