@@ -284,6 +284,7 @@
             <p class="lead">The legacy Baji media-list/delete commands do not apply to FitPro/Dial31. This panel reads only BG02 commands already observed in the SuperBand app.</p>
             <div class="row">
               <button type="button" id="btnBg02LibraryInspect" disabled>Read badge media metadata</button>
+              <button type="button" id="btnBg02MediaInterface" disabled>Check file-list interface</button>
               <button type="button" id="btnBg02LibraryExport" disabled>Export diagnostic JSON</button>
             </div>
             <div class="picture-size-grid">
@@ -292,8 +293,17 @@
               <div><span>Dial algorithm</span><strong id="bg02LibraryAlgorithm">—</strong></div>
               <div><span>Known media listing</span><strong>Not decoded</strong></div>
             </div>
+            <div class="picture-size-grid">
+              <div><span>Possible RCSP file-list transport</span><strong id="bg02MediaTransport">Not checked</strong></div>
+              <div><span>Available stored-file entries</span><strong id="bg02MediaEntries">Not enumerated</strong></div>
+            </div>
+            <p id="bg02MediaTransportDetails" class="hint">Checking the AE00 GATT service does not query files, authenticate RCSP, or alter badge media.</p>
+            <div id="bg02MediaTelemetry" class="media-telemetry" hidden>
+              <strong>Read-only storage/count history</strong>
+              <p id="bg02MediaTelemetrySummary" class="hint">Read media metadata twice to compare candidate count and free bytes.</p>
+            </div>
             <p id="bg02LibraryStatus" role="status" class="hint">Connect BG02 V1.5 to read dial metadata and free storage. No deletion or formatting is available.</p>
-            <p class="hint">The count byte is experimental and may not represent installed pictures. A real device-file listing and safe deletion command still require protocol evidence from SuperBand.</p>
+            <p class="hint">This is not a file list. Generic JieLi RCSP supports file browsing on some firmware, but BG02 support is unverified. The count byte may not represent installed pictures. No unknown list, delete, format, or OTA command will be sent.</p>
           </section>
         </div>
       </div>
