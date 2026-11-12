@@ -19,6 +19,8 @@ export function bindVideo({ client, log, toast, $ }) {
     startLabel: $('#videoStartLabel'),
     endLabel: $('#videoEndLabel'),
     seconds: $('#videoSeconds'),
+    fps: $('#videoFps'),
+    fpsInfo: $('#videoFpsInfo'),
     quality: $('#videoQuality'),
     fit: $('#videoFit'),
     loop: $('#videoLoop'),
@@ -84,21 +86,41 @@ export function bindVideo({ client, log, toast, $ }) {
     const end = Number(els.end.value);
     const seconds = Number(els.seconds.value);
     return {
-      start, end, seconds, quality: els.quality.value,
+      start, end, seconds, fps: Number(els.fps.value),
+      quality: els.quality.value,
       fit: els.fit.value, loop: els.loop.checked,
       frameIndices: source.kind === 'gif' && els.gifUseFrames.checked ?
         [...selectedGifFrames] : null,
-      holdFrames: Number(els.gifHold.value),
+      // Frame holds are whole output frames; this is the exact duration
+      // (one frame at 0.5fps lasts two seconds).
+      holdSeconds: Number(els.gifHold.value) / Number(els.fps.value),
     };
   }
 
+  function updateFrameRateLabels() {
+    const fps = Number(els.fps.value);
+    for (const option of els.gifHold.options) {
+      const frames = Number(option.value);
+      const duration = frames / fps;
+      option.textContent = frames + (frames === 1 ? ' AVI frame' : ' AVI frames') +
+        ' (' + duration.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + ' seconds)';
+    }
+    els.fpsInfo.textContent = fps === 3
+      ? '3 fps matches the recovered SuperBand format. Frame duration: 0.33 seconds.'
+      : fps + ' fps is experimental: each complete frame lasts ' +
+        (1 / fps).toFixed(2).replace(/0+$/, '').replace(/\.$/, '') +
+        ' seconds. Playback speed and acceptance are not yet verified.';
+  }
+
   function showRange() {
+    updateFrameRateLabels();
     if (!source) return;
     const sel = selection();
     if (source.kind === 'avi') {
       els.startLabel.textContent = '0.0 s';
       els.endLabel.textContent = fmtTime(source.durationSeconds);
-      els.rangeInfo.textContent = 'Compatible MJPEG AVI: pass through unchanged (no trim or re-encoding).';
+      els.rangeInfo.textContent = 'Compatible MJPEG AVI at ' +
+        source.aviInfo.fps + ' fps: pass through unchanged (no trim or re-encoding).';
       return;
     }
     els.startLabel.textContent = fmtTime(sel.start);
@@ -115,20 +137,37 @@ export function bindVideo({ client, log, toast, $ }) {
         ? planGifStoryboard({
           frameIndices: sel.frameIndices,
           sourceFrameCount: source.ends.length,
-          holdFrames: sel.holdFrames, maxSeconds: sel.seconds,
-          loop: sel.loop,
+          holdSeconds: sel.holdSeconds, maxSeconds: sel.seconds,
+          loop: sel.loop, fps: sel.fps,
         })
         : planTrimmedVideo({
           start: sel.start, end: sel.end,
-          maxSeconds: sel.seconds, loop: sel.loop,
+          maxSeconds: sel.seconds, loop: sel.loop, fps: sel.fps,
         });
+      const baseline = sel.fps === 3 ? plan : (
+        sel.frameIndices !== null
+          ? planGifStoryboard({
+            frameIndices: sel.frameIndices,
+            sourceFrameCount: source.ends.length,
+            holdSeconds: sel.holdSeconds,
+            maxSeconds: sel.seconds, loop: sel.loop, fps: 3,
+          })
+          : planTrimmedVideo({
+            start: sel.start, end: sel.end,
+            maxSeconds: sel.seconds, loop: sel.loop, fps: 3,
+          })
+      );
+      const fewerFrames = Math.max(0, Math.round(
+        100 * (1 - plan.frameCount / baseline.frameCount)
+      ));
       const label = sel.frameIndices !== null
         ? selectedGifFrames.size + ' chosen frames'
         : 'Source segment ' + fmtTime(sel.end - sel.start) +
           ' (' + fmtTime(sel.start) + '–' + fmtTime(sel.end) + ')';
       els.rangeInfo.textContent = label + ' → ' +
-        plan.frameCount + ' AVI frames / ' + fmtTime(plan.seconds) +
-        ' (maximum ' + fmtTime(sel.seconds) + ')' +
+        plan.frameCount + ' AVI frames at ' + sel.fps + ' fps / ' +
+        fmtTime(plan.seconds) + ' (maximum ' + fmtTime(sel.seconds) + ')' +
+        (sel.fps !== 3 ? ' · ' + fewerFrames + '% fewer frames than 3 fps' : '') +
         (plan.clipped ? ' · selection capped' : '') +
         (plan.repeated ? ' · repeated by choice' : ' · no automatic repeat');
     } catch (e) {
@@ -172,6 +211,7 @@ export function bindVideo({ client, log, toast, $ }) {
     els.start.disabled = !source || !idle || aviOriginal || useFrames;
     els.end.disabled = !source || !idle || aviOriginal || useFrames;
     els.seconds.disabled = !idle || aviOriginal;
+    els.fps.disabled = !idle || aviOriginal;
     els.quality.disabled = !idle || aviOriginal;
     els.fit.disabled = !idle || aviOriginal;
     els.loop.disabled = !idle || aviOriginal;
@@ -304,6 +344,7 @@ export function bindVideo({ client, log, toast, $ }) {
       }
       els.start.value = '0';
       els.end.value = String(candidate.durationSeconds);
+      if (candidate.kind === 'avi') els.fps.value = String(candidate.aviInfo.fps);
       els.loop.checked = false; // Never repeat short GIFs implicitly.
       syncMarkerLimits();
       showRange();
@@ -350,17 +391,21 @@ export function bindVideo({ client, log, toast, $ }) {
       els.outputFrame.hidden = false;
       els.exactSize.textContent = 'AVI: ' + formatBytes(result.bytes.length) +
         ' (' + result.bytes.length.toLocaleString() + ' bytes)' +
-        ' · ' + result.info.frames + ' frames / ' +
-        fmtTime(result.info.seconds);
+        ' · ' + result.info.frames + ' frames at ' +
+        result.info.fps + ' fps / ' + fmtTime(result.info.seconds);
       const durationWarning = result.info.seconds > BG02_VIDEO.VERIFIED_SECONDS;
-      els.status.textContent = source.kind === 'avi'
-        ? 'Compatible AVI kept unchanged. You can upload this exact file as the control test.'
+      const experimentalFps = result.info.fps !== BG02_VIDEO.FPS;
+      els.status.textContent = experimentalFps
+        ? 'AVI converted. ' + result.info.fps +
+          ' fps is experimental — badge playback may be sped up, truncated or rejected.'
+        : source.kind === 'avi'
+        ? 'Original 3 fps AVI kept unchanged. You can upload this exact file.'
         : durationWarning
         ? 'Converted. Longer-than-five-second playback is unverified; test on the badge.'
-        : 'Converted. This AVI format matches the recovered 5-second file structure; playback must be checked.';
+        : 'Converted at the recovered 3 fps reference; browser JPEG playback needs a badge check.';
       log({ msg: 'Video AVI ready ' + result.bytes.length + ' bytes · ' +
         result.info.frames + ' frames · quality=' + selected.quality +
-        ' · ' + result.info.seconds + 's', level: 'ok' });
+        ' · ' + result.info.seconds + 's · ' + result.info.fps + 'fps', level: 'ok' });
     } catch (e) {
       if (e.name !== 'AbortError') notify('Conversion failed: ' + e.message, 'err');
       else notify('Conversion cancelled.');
@@ -394,10 +439,13 @@ export function bindVideo({ client, log, toast, $ }) {
       return;
     }
     const item = converted;
-    if (item.info.seconds > BG02_VIDEO.VERIFIED_SECONDS) {
-      if (!confirm('Only 5-second AVI playback is verified. Longer videos may be rejected, truncated, or consume storage. Upload anyway?')) {
-        return;
-      }
+    if (item.info.seconds > BG02_VIDEO.VERIFIED_SECONDS ||
+        item.info.fps !== BG02_VIDEO.FPS) {
+      const warning = item.info.fps !== BG02_VIDEO.FPS
+        ? 'This ' + item.info.fps +
+          ' fps AVI is experimental. The badge may reject it or play it at the wrong speed.'
+        : 'The badge playback limit beyond 5 seconds is unverified.';
+      if (!confirm(warning + ' This may consume badge storage. Upload anyway?')) return;
     }
     uploading = true;
     refresh();
@@ -454,6 +502,7 @@ export function bindVideo({ client, log, toast, $ }) {
     el.addEventListener('change', invalidated);
   }
   els.seconds.addEventListener('change', setPreset);
+  els.fps.addEventListener('change', invalidated);
   els.gifUseFrames.addEventListener('change', invalidated);
   els.gifHold.addEventListener('change', invalidated);
   els.gifClear.addEventListener('click', () => {
