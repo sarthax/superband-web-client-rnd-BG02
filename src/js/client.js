@@ -33,6 +33,7 @@ import {
   buildFitProStorageRequest,
   parseFitProStorageResponse,
   isFitProStoragePacket,
+  chooseFitProDialType,
   buildDialStart,
   buildDialStartPayload,
   buildDialDataChunk,
@@ -639,7 +640,7 @@ class BadgeSession {
       // Preserve the existing RU50 upload dialect even after a read-only
       // 0x20/2 query reports JPEG capability. Telemetry must not change what
       // the image sender previously transmitted.
-      const dialType = isRu50 ? 0 : (info?.dialType ?? (info?.algorithm === 4 ? 2 : 0));
+      const dialType = chooseFitProDialType(info, isRu50);
       const expectJpeg = dialType === 2;
       if (isRu50 && expectJpeg) throw new Error('RU50 requires dial type 0, not JPEG type 2');
       const looksJpeg =
