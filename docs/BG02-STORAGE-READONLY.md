@@ -79,3 +79,28 @@ There were **no** `DIAL_INFO_REQUEST 0x20/2` or `FITPRO_20_04_STORAGE` transmiss
 Fix: match the exact observed **board revision** `LJ733_MB_V1.5` with either the short **BG02** name or the longer **LJ733_V1_BadgeOK** name. Skip the irrelevant Baji probe for BG02; enable both read-only FitPro telemetry commands and the post-upload refresh. Add an identity regression test using the user's exact reported name/revision. Do not broaden the probe to all LJ733 hardware revisions.
 
 **Minimum validation after pulling**: reconnect **without uploading anything** and check the Activity log for `DIAL_INFO_REQUEST`, `FITPRO_20_04_STORAGE`, and either `BG02 0x20/4: raw=...` or `BG02 storage read unavailable`. This distinguishes command delivery from uncertain free-space semantics.
+
+## 2026-11-11 20:03–20:04 live BG02 storage evidence — query now works
+
+User's Windows browser log from actual `BG02`, DIS firmware `V35922`, board `LJ733_MB_V1.5`:
+
+| Stage | 0x20/4 response data | Second BE32 | Free space |
+|---|---|---:|---:|
+| Connected, 20:03:12 PST | `0000000000042000` | 270,336 B | 264 KiB |
+| After Dial31 finish, 20:04:06 PST | `000000000003a000` | 237,568 B | 232 KiB |
+| Difference | — | **-32,768 B** | **-32 KiB** |
+
+Transfer reported `img=29904` bytes RU50/ETC2, `fileBlob=29908` bytes including the four-byte wrapper. The change in available space is **exactly 32 KiB** despite the approximately 29.2 KiB file. This is good independent behavioral evidence that the second 32-bit field is live remaining media storage (not merely a static diagnostic or a copied stale number).
+
+The free values are both divisible by 8192; a flash/filesystem allocation unit or rounding is plausible, but the physical erase-block size, metadata cost, and whether file overwrites reclaim old blocks are **not proven** from this one transfer. A media payload of 29,904 bytes would need four 8192-byte units if 8192-byte units are indeed used.
+
+This does **not** establish the total user-media storage capacity: do not calculate total capacity by adding visible photo sizes to the free value. The suspected lost storage is not explained by the BLE transport; investigating hidden/orphaned media allocations or delete/garbage-collection behavior remains a separate task.
+
+Observed sequence and log:
+- `→ DIAL_INFO_REQUEST`, parsed `240×240 alg=4 chunk=5000 K66`
+- `→ FITPRO_20_04_STORAGE` + `BG02 0x20/4: raw=0000000000042000 first=0 candidateFree=270336 bytes`
+- Dial31 completed in 61 logical chunks, status success
+- `→ FITPRO_20_04_STORAGE` + `BG02 0x20/4: raw=000000000003a000 first=0 candidateFree=237568 bytes`
+- `BG02 storage candidate after upload: before=270336B after=237568B change=-32768B`
+
+**Next diagnostic:** no need for additional uploads. If the user wants to delete the just-uploaded picture through the badge's UI, compare free bytes before/after with the Refresh storage button; recovery of the expected allocation would show whether this specific object's deletion reclaims space. Do not send an unverified format/wipe command.
