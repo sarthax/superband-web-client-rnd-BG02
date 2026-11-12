@@ -80,3 +80,58 @@ test('invalid GIF frame indexes and empty selection fail before encoding', () =>
   assert.throws(()=>planGifStoryboard({frameIndices:[0],sourceFrameCount:5,holdFrames:4}));
   assert.throws(()=>planTrimmedVideo({start:3,end:3,maxSeconds:5}));
 });
+
+test('lower FPS frame count for strict 5s cap without repeat', () => {
+  const cases = [
+    [3, 15, 5],
+    [2, 10, 5],
+    [1, 5, 5],
+    [0.5, 2, 4], // never silently exceed the 5s cap with 3x2s frames
+  ];
+  for (const [fps, expectedFrames, expectedSeconds] of cases) {
+    const timeline = planTrimmedVideo({start:0,end:9,maxSeconds:5, fps});
+    assert.equal(timeline.fps, fps);
+    assert.equal(timeline.frameCount, expectedFrames);
+    assert.equal(timeline.seconds, expectedSeconds);
+    assert.equal(timeline.repeated, false);
+  }
+});
+
+test('short GIF at 1fps is not padded to 5s without Repeat', () => {
+  const once = planTrimmedVideo({start:0,end:3,maxSeconds:5,fps:1});
+  assert.equal(once.frameCount,3);
+  assert.equal(once.seconds,3);
+  assert.equal(once.repeated,false);
+  const repeating = planTrimmedVideo({start:0,end:3,maxSeconds:5,fps:1,loop:true});
+  assert.equal(repeating.frameCount,5);
+  assert.deepEqual(repeating.sourceTimes,[0,1,2,0,1]);
+  assert.equal(repeating.repeated,true);
+});
+
+test('frame-picker 3 chosen stills held one second at 1fps = 3 MJPEG frames', () => {
+  const frames = planGifStoryboard({
+    frameIndices:[2,5,9],sourceFrameCount:12,
+    maxSeconds:5,fps:1,holdSeconds:1,
+  });
+  assert.deepEqual(frames.frameIndexes,[2,5,9]);
+  assert.equal(frames.seconds,3);
+  assert.equal(frames.holdOutputFrames,1);
+});
+
+test('low fps still hold is based on whole output frames, not 3fps ticks', () => {
+  const p=planGifStoryboard({
+    frameIndices:[0,4,8], sourceFrameCount:12,
+    maxSeconds:5, fps:0.5, holdSeconds:2,
+  });
+  assert.equal(p.holdOutputFrames,1);
+  assert.equal(p.actualHoldSeconds,2);
+  assert.equal(p.frameCount,2);
+  assert.equal(p.seconds,4);
+  assert.equal(p.clipped,true);
+  assert.deepEqual(p.frameIndexes,[0,4]);
+});
+
+test('reject unsupported FPS and impossible frame period', () => {
+  assert.throws(()=>planTrimmedVideo({start:0,end:5,maxSeconds:5,fps:0.75}));
+  assert.throws(()=>planTrimmedVideo({start:0,end:5,maxSeconds:1,fps:0.5}));
+});
