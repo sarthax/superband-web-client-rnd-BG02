@@ -6,6 +6,8 @@ import {
   isFitProStoragePacket,
   parseDialInfo,
   chooseFitProDialType,
+  looksLikeFitProBadge,
+  isKnownBg02V15Identity,
 } from '../js/fitpro.js';
 import { parsePacket } from '../js/protocol.js';
 
@@ -62,4 +64,15 @@ test('reading JPEG capability must not change BG02 RU50 upload dial type', () =>
   assert.equal(chooseFitProDialType(jpegInfo, true), 0);
   assert.equal(chooseFitProDialType(jpegInfo, false), 2);
   assert.equal(chooseFitProDialType(null, false), 0);
+});
+
+test('actual BG02 device name and V1.5 revision qualify for FitPro storage reads', () => {
+  // 2026-11-11 19:01 browser log: Selected: BG02; DIS: hw=LJ733_MB_V1.5
+  assert.equal(looksLikeFitProBadge('BG02'), true);
+  assert.equal(isKnownBg02V15Identity('BG02', 'LJ733_MB_V1.5'), true);
+  assert.equal(isKnownBg02V15Identity('LJ733_V1_BadgeOK', 'LJ733_MB_V1.5'), true);
+  assert.equal(isKnownBg02V15Identity('DG01', 'LJ733_MB_V1.5'), false);
+  assert.equal(isKnownBg02V15Identity('BG02', 'LJ733_MB_V1.1'), false);
+  assert.equal(isKnownBg02V15Identity('BG02', null), false);
+  assert.equal(isKnownBg02V15Identity(null, 'LJ733_MB_V1.5'), false);
 });
