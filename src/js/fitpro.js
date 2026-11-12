@@ -20,6 +20,7 @@ export const FitPro = {
   InfoCmd: {
     STATUS: 1,
     INFO: 2,
+    STORAGE: 4, // BG02: 0x20/4 reply carries two BE32 words; second varies with media usage
   },
   LegacyCmd: {
     /** zl.java post-connect: D(10), D(12), D(28) */
@@ -167,6 +168,31 @@ export function buildDialInfoRequest() {
 
 export function buildDialStatusRequest() {
   return buildFitProFrame(FitPro.DIAL_INFO_MODULE, FitPro.InfoCmd.STATUS);
+}
+
+/** Read-only BG02 FitPro 0x20/4 query, observed in SuperBand Android HCI capture. */
+export function buildFitProStorageRequest() {
+  return buildFitProFrame(FitPro.DIAL_INFO_MODULE, FitPro.InfoCmd.STORAGE);
+}
+
+/**
+ * Observed BG02 response: 8-byte payload, two big-endian uint32 words.
+ * The second word fell from 204800 to 163840 between Android sessions.
+ * It is a strong *candidate* for free media bytes, not overall flash capacity.
+ */
+export function parseFitProStorageResponse(payload) {
+  if (!payload || payload.length !== 8) return null;
+  return {
+    word0: getU32BE(payload, 0),
+    reportedBytes: getU32BE(payload, 4),
+  };
+}
+
+export function isFitProStoragePacket(pkt) {
+  return !!pkt &&
+    (pkt.dialect === 'fitpro' || pkt.legacy) &&
+    (pkt.moduleId === FitPro.DIAL_INFO_MODULE || pkt.moduleKey === FitPro.DIAL_INFO_MODULE) &&
+    (pkt.commandId === FitPro.InfoCmd.STORAGE || pkt.command === FitPro.InfoCmd.STORAGE);
 }
 
 /** Short legacy probe: CD 00 05 1A 01 {cmd} 00 00 */
