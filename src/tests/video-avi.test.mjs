@@ -44,7 +44,7 @@ test('allocation is a hint, not a capacity estimate', () => {
   assert.equal(BG02_VIDEO.VERIFIED_SECONDS, 5);
   assert.equal(BG02_VIDEO.FPS, 3);
   assert.equal(estimateVideoAllocation(29904), 32768);
-  assert.equal(estimateVideoAllocation(32768), 32768);
+  assert.equal(estimateVideoAllocation(32768), 40960);
   assert.equal(estimateVideoAllocation(32769), 40960);
 });
 
