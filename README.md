@@ -1,87 +1,75 @@
-# BG02 Picture Manager
+# BG02 Picture & Video Manager
 
-A browser-based picture uploader for the **BG02 / LJ733 electronic badge** and a research-compatible manager for other SuperBand/Baji/FitPro badges.
+A browser-based editor and uploader for **BG02 / LJ733_MB_V1.5 electronic badges**, with experimental compatibility tooling for other FitPro/Baji badges.
 
-**Everyday workflow:** Connect badge → Choose a picture → Crop/zoom → Upload.
+**No cloud media server.** Pictures and GIF/video conversions run locally in Chrome/Edge and are uploaded directly over Web Bluetooth when you explicitly click Upload. The manager does not change the badge picture automatically.
 
-This is a **static browser application**, not a picture-storage web server. The image is processed in your browser and sent directly to the badge with Web Bluetooth; it is not uploaded to a website or cloud service.
+## Start
 
-## Use it
+- [Open the hosted Badge Manager](https://sarthax.github.io/superband-web-client-rnd-BG02/) (GitHub Pages, deployed from `main`) or run locally.
+- Use Chrome or Edge with Bluetooth enabled; Web Bluetooth requires localhost or HTTPS.
+- Connect BG02, choose a source image, adjust the circular crop and zoom, click **Optimize picture**, review the output and click **Upload picture**.
 
-- Open the [fork's GitHub Pages site](https://sarthax.github.io/superband-web-client-rnd-BG02/) **after the picture branch has been deployed**, or run locally (see below).
-- Use **Chrome or Edge on desktop** with Bluetooth enabled. Web Bluetooth generally requires HTTPS or localhost; Firefox does not provide the required Web Bluetooth API.
-- Click **Connect badge**, choose a JPG/PNG/WebP, drag inside the circular crop, adjust Zoom, and click **Upload picture**.
-- After the transfer is acknowledged, **check the badge display**. Bluetooth success does not prove on-device rendering.
-- Advanced users can still import pre-encoded **.ru50** pictures for BG02.
+### BG02 still pictures — validated on V35922/LJ733_MB_V1.5
 
-**BG02 V35922:** Fixed 240×240 output, browser ETC2 RGB8 encoding inside the RU50 container (29,904 bytes), sent using the existing FitPro Dial31 transfer. The invalid direct RGB565 route is blocked for confirmed BG02 devices. For other devices the existing Baji JPEG or generic FitPro RGB565 paths remain available. The controls and format adapt to the *connected* badge.
+| Codec | Status | Notes |
+| --- | --- | --- |
+| **JPEG 4:4:4** | **Preferred** on confirmed BG02 V1.5 with dial algorithm 4 | User confirmed successful display, >53% byte savings on one image and improved text edges vs RU50. Actual file size depends on picture. |
+| RU50 / ETC2 | Working fallback | Fixed 29,904 B at 240×240, ~32 KiB estimated storage allocation. |
 
-The browser crop/encoder has been implemented and the owner has reported working image uploads. **Before the final public release, verify that the merged/released commit is the one that produced the good on-device picture.** Earlier PR descriptions still label their own snapshots as hardware-unverified.
+The editor previews **source**, **decoded actual RU50**, and **decoded actual JPEG**, shows exact encoded bytes and a preliminary 8 KiB-rounded allocation estimate, and offers a quality slider 35–90. **Optimize picture** finds the highest tested JPEG quality fitting the allocation block at the initial 80% quality. Smaller/larger-block controls remain available. A confirmed BG02 V1.5 starts with JPEG; incomplete identities use RU50.
 
-### What is *not* supported on BG02
+All output is 240×240 on BG02. Upload requires a connected, exact supported device identity and an explicit user action. JPEG uploads query free storage before transmission and validate the encoded file. The measured 8 KiB allocation increment is empirical, not a proven filesystem specification.
 
-- Downloading, listing, or deleting pictures already stored on the badge.
-- Badge-to-badge sharing from the web page.
-- Automatic GIF/AVI upload from the browser (experimental external conversion tools are not part of this UI).
-- Firmware flashing as part of picture uploads. **Do not use an unrelated BJ-1/DG01 OTA package on BG02.**
+### Video and animated GIF
 
-The extensive Bluetooth/firmware experiments remain separate and are **not needed** for ordinary pictures.
+The **Video & GIF** tab accepts common browser-playable videos and animated GIFs, trims a segment, supports selecting GIF frames, shared/per-frame crops, compression and output comparison, and creates **240×240 Motion JPEG AVI**. You can download the encoded AVI before uploading.
 
-## Run locally (Windows / macOS / Linux)
+The original SuperBand capture was 3 fps for five seconds. The owner separately reported successful 1 fps playback on BG02; longer lengths and other settings remain experimental. Output has no audio; AVI size and storage allocation are measured before upload.
 
-Requires [Bun](https://bun.sh/) and a Chromium-family browser.
+### Media diagnostics — read-only
+
+The BG02 section can query FitPro **`0x20/2`** (dial info) and **`0x20/4`** (free storage), compare repeated storage readings, export sanitized diagnostics, and check whether **AE00/AE01/AE02** is present. This **does not list stored media files**. The legacy Baji file listing/deletion implementation is explicitly not available on BG02.
+
+On V35922, AE00/AE01/AE02 are present, but an opt-in RCSP target-info `0x03` read timed out without a matching reply. Further authenticated RCSP/file-list research is on a separate [draft PR #12](https://github.com/sarthax/superband-web-client-rnd-BG02/pull/12) and local-agent workflow. Do not use Baji delete commands or guessed media opcodes on BG02.
+
+### Firmware research is offline-only
+
+The **Advanced** tab supports GATT probing, OTA catalogue lookups, download and offline inspection of manufacturer firmware packages. **Browser firmware flashing is disabled**: no exact compatible BG02 V1.5 firmware package or authenticated RCSP updater has been qualified. BJ-1/DG01 LJ733 V1.2 packages are **not interchangeable** with BG02 V1.5.
+
+See [BG02 V35922 OTA acquisition handoff](docs/BG02-V35922-OTA-FIRMWARE-ACQUISITION-HANDOFF.md) in draft #12 and [OTA protocol research](docs/protocol/ota-firmware.md). The earlier standalone experimental flashing helper is not a validated recovery method.
+
+## Local development
+
+Requires Bun, Node for tests, and Chrome/Edge.
 
 ```bash
 cd src
 bun install --frozen-lockfile
 bun run dev
-# Open http://localhost:8787
+# http://localhost:8787
 ```
 
-Focused regression and production build:
+Production build:
 
 ```bash
 cd src
-node --test tests/ru50.test.mjs tests/device-profile.test.mjs tests/browser-etc2.test.mjs
 bun run build
 ```
 
-No Python, `etcpak`, phone app, or local firmware SDK is required for the **browser photo workflow**.
+The GitHub Actions **Validate** workflow runs the repository's codec, device profile, media and safety tests as a single pass, then builds the site. **Pages** deploys to GitHub Pages on a `main` push.
 
-## Day-to-day UI vs research
+## Code and research
 
-| View | What belongs there |
-|---|---|
-| **Pictures** | Connect/disconnect, active badge, choose image, crop and zoom, upload, persistent progress/error messages |
-| **Optional device details** | Technical identity fields and re-pair controls |
-| **Advanced** | Activity log, GATT/OTA information, protocol probes and research controls; **not needed to upload** |
+- `src/js/app.js` — picture editing workflow and badge-aware actions
+- `src/js/circle-crop.js`, `picture-comparison.js`, `jpeg-allocation.js` — framing, RU50/JPEG preview and quality/space selection
+- `src/js/video-ui.js`, `video-avi.js` — video/GIF editor and MJPEG output
+- `src/js/client.js`, `fitpro.js` — FitPro/Dial31 transport and telemetry
+- `src/js/bg02-library-ui.js`, `bg02-media-capabilities.js` — read-only media feasibility
+- `src/js/ota-safety.js` — fail-closed browser OTA gate
+- [Research documentation](docs/README.md), [protocol notes](docs/protocol/), [local tools](tools/README.md)
+- [Research source](https://github.com/T-REX-XP/superband-web-client-rnd)
 
-For BG02 the unrelated Baji media library and BJ-1/DG01 OTA presets are hidden or disabled. Other supported device families retain their original behavior.
+## Merge policy
 
-## Code and documentation
-
-| Location | Content |
-|---|---|
-| [`src/`](src/) | Browser UI, image conversion, Web Bluetooth and static production build |
-| [`src/js/circle-crop.js`](src/js/circle-crop.js) | Drag, touch/pinch, zoom, and circular output |
-| [`src/js/ru50.js`](src/js/ru50.js), [`src/js/etc2.js`](src/js/etc2.js) | RU50 wrapper, CRC16 and browser ETC2 encoding |
-| [`src/js/device-profile.js`](src/js/device-profile.js) | BG02 vs Baji vs generic FitPro behavior |
-| [BG02 browser crop and codec](docs/BG02-BROWSER-CROP.md) | Original picture workflow and acceptance checks |
-| [Device-aware UI](docs/DEVICE-AWARE-UI.md) | Device capability boundaries and precautions |
-| [RU50 research](docs/BG02-RU50-EXPERIMENT.md) | Historical manual encoder/import fallback |
-| [Protocol notes](docs/README.md) | GATT, FitPro, Baji, OTA, security and reverse-engineering references |
-| [Research and firmware tools](tools/README.md) | Optional standalone tooling; **not required for picture uploads** |
-
-The **picture upload changes are stacked** as draft PRs [#1](https://github.com/sarthax/superband-web-client-rnd-BG02/pull/1), [#2](https://github.com/sarthax/superband-web-client-rnd-BG02/pull/2), and [#3](https://github.com/sarthax/superband-web-client-rnd-BG02/pull/3). Finish and review the [picture cleanup PR](https://github.com/sarthax/superband-web-client-rnd-BG02/pulls) on top of #3 before merging in order. **Do not merge or deploy unreviewed local overrides.**
-
-The separate [BG02 peer sharing / readback research PR #4](https://github.com/sarthax/superband-web-client-rnd-BG02/pull/4) is intentionally not part of the picture release.
-
-## Deployment
-
-The static site is published by [GitHub Pages Actions](.github/workflows/pages.yml). The workflow calculates the repository's base path. A push to `main` or an explicit manual workflow run can deploy the chosen branch; **manual deployment replaces the current Pages site**, so test the merged commit before publishing it. The single [Validate workflow](.github/workflows/validate.yml) runs the three focused image tests and builds the web client.
-
-## Attribution and safety
-
-Fork of [T-REX-XP/superband-web-client-rnd](https://github.com/T-REX-XP/superband-web-client-rnd), derived from unofficial research into SuperBand Android 2.1.25 (`com.legend.smartwatch.electronicbadge.android`). Additional experimental media-format references include [arqueomendez/ebadge](https://github.com/arqueomendez/ebadge). Not affiliated with the badge vendor or app publisher.
-
-Use only with devices and firmware you control. Advanced OTA flashing and protocol tools can disconnect or permanently damage a device; picture uploads **do not require** them.
+Feature work is reviewed in PRs and merged by the repository owner. Earlier BG02 UI/codec/media PRs **#1–#3 and #5–#11** are merged into `main`. **#4** (peer-sharing) and **#12** (read-only RCSP research) remain separate research branches. Nothing in the everyday picture/video workflow requires those research features to succeed.
