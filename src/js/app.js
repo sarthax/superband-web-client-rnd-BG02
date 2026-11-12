@@ -220,8 +220,6 @@ function applyBadgeProfile(snapshot = client.getSnapshot()) {
   $('#btnOtaFlash').disabled = profile.bg02 || !client.connected;
   $('#btnOtaFlashPicker').disabled = profile.bg02;
   $('#otaConfirmRisk').disabled = profile.bg02;
-  $('#btnRefreshStorage').disabled = !snapshot?.storageProbeSupported ||
-    !client.connected || transferring || client.anyTransferring;
   if (changed && profile.bg02) $('#otaConfirmRisk').checked = false;
   if (changed) {
     const file = $('#imageInput').files?.[0];
@@ -299,6 +297,8 @@ function updatePushChecklist() {
   const connected = client.connected;
   const imageReady = !!prepared;
   const idle = !transferring && !client.anyTransferring;
+  const storageProbe = client.getSnapshot()?.storageProbeSupported;
+  $('#btnRefreshStorage').disabled = !connected || !idle || !storageProbe;
   const map = { conn: connected, image: imageReady, idle };
   for (const [key, ok] of Object.entries(map)) {
     const li = document.querySelector(`[data-check="${key}"]`);
